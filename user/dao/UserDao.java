@@ -5,10 +5,14 @@ import user.domain.User;
 import java.sql.*;
 
 public class UserDao {
+    private SimpleConnectionMaker simpleConnectionMaker;
+
+    public UserDao(){
+        simpleConnectionMaker = new SimpleConnectionMaker();
+    }
+
     public void add(User user) throws ClassNotFoundException, SQLException{
-        Class.forName("com.mysql.jdbc.Driver");
-        Connection c = DriverManager.getConnection(
-                "jdbc:mysql://localhost:3306/tobi-spring");
+        Connection c = simpleConnectionMaker.makeNewConnection();
         PreparedStatement ps = c.prepareStatement(
                 "insert into users(id, name, password) value(?,?,?)");
         ps.setString(1, user.getId());
@@ -22,9 +26,7 @@ public class UserDao {
     }
 
     public User get(String id) throws ClassNotFoundException, SQLException{
-        Class.forName("com.mysql.jdbc.Driver");
-        Connection c = DriverManager.getConnection(
-                "jdbc:mysql://localhost:3306/tobi-spring");
+        Connection c = simpleConnectionMaker.makeNewConnection();
         PreparedStatement ps = c.prepareStatement(
                 "select * from users where id = ?");
         ps.setString(1, id);
@@ -42,7 +44,6 @@ public class UserDao {
 
         return user;
     }
-
 
     public static void main(String[] args)throws ClassNotFoundException, SQLException{
         UserDao dao = new UserDao();
