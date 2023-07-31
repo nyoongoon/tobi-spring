@@ -88,3 +88,91 @@ public class UserDao {
 ![](/img/img_1.png)
 - 두개의 독립된 클래스로 분리한 결과
 - UserDao는 SimpleConnectionMaker클래스의 오브젝트를 만들어두고 각 메소드에서 사용
+```java
+public class SimpleConnectionMaker {
+    public Connection makeNewConnection() throws ClassNotFoundException, SQLException{
+        Class.forName("com.mysql.jdbc.Driver");
+        Connection c = DriverManager.getConnection(
+                "jdbc:mysql:localhost:3306/tobi-spring");
+        return c;
+    }
+}
+```
+### 문제점
+- 상속을 통해 DB 커넥션 기능을 확장해서 사용하는 게 불가능해짐
+- UserDao 코드가 SimpleConnectionMaker라는 특정 클래스에 종속되어 있기 때문
+- simpleConnectionMaker = new SimpleConnectionMaker();
+- -> 위처럼 클래스 분리 경우에도 상속처럼 자유로운 확장이 가능하게 하려면
+
+### 인터페이스의 도입
+- 두 개의 클래스가 긴밀하게 연결되어 있지 않도록 중간에 추상적인 느슨한 연결고리 만들어 주는 것.
+- "추상화"란 어떤것들의 공통적인 성격을 뽑아내어 이를 따로 분리해내는 작업. 
+- 자바가 추상화를 위해 제공하는 가장 유용한 도구는 바로 "인터페이스"
+- 인터페이스는 자신을 구현한 클래스에 대한 구체적 정보는 감춰버림.
+- -> 인터페이스로 추상화해놓은 최소한의 통로를 통해 접근하는 쪽에서 오브젝트를 만들 떄 클래스가 무엇인지 몰라도 됨
+
+```java
+import java.sql.SQLException;
+
+public interface ConnectionMaker {
+    public Connection makeConnection() throws ClassNotFoundException, SQLException;
+}
+```
+
+```java
+public class UserDao {
+    private ConnectionMaker connectionMaker;
+
+    public UserDao() {
+        connectionMaker = new DConnectionMaker(); // 클래스 이름이 나오는 중..
+    }
+    //...
+}
+```
+- 위의 코드에서는 DConnection이라는 구현 클래스이름이 보임
+- 인터페이스를 사용하더라도 DConnection 이라는 클래스 생성 로직이 남아 있
+- -> 초기에 한 번 어떤 클래스를 사용할지 결정하는 코드가 남아있음
+
+
+### 관계설정 책임의 분리
+- new DConnectionMaker() 라는 코드는 그 자체로 독립적인 관심사를 담고 있음
+- -> UserDao가 어떤 ConnectionMaker 구현 클래스의 오브젝트를 이용하게 할지를 결정하는 것.
+- -> UserDao와 UserDao가 사용할 ConnectionMaker의 특정 구현 클래스의 관계를 설정해주는 관심
+- **UserDao를 사용하는 클라이언트 오브젝트에서** UserDao와 ConnectionMaker 관계를 결정해주는 로직을 두기
+
+#### 오브젝트와 오브젝트의 관계 설정
+- 오브젝트 사이의 관계는 **런타임 시** 한쪽이 다른 오브젝트 레퍼런스를 갖고 있는 방식으로 만들어짐.
+- ex) DConnectionMaker의 오브젝트의 레퍼런스를 UserDao의 connectionMaker 변수에 넣어서 사용하게 함으로써
+- -> 두 개의 오브젝트가 '사용'이라는 관계를 맺게 해줌.
+- connetionMaker = new DConnectionMaker();
+- -> 오브젝트 사이의 관계가 만들어지려면 일단 만들어진 오브젝트가 있어야함
+- -> 위처럼 생성자 직접 호출 방법도 있지만, 외부에서 만들어주는 것을 가져오는 방법도 있음.
+- -> 외부에서 만든 오브젝트를 전달받으려면 메소드 파라미터나 생성자 파라미터를 이용하면 됨.
+
+#### 파라미터의 타입을 전달받을 오브젝트의 인터페이스로 선언했을 경우
+- -> 파라미터로 전달되는 오브젝트의 클래스는 해당 인터페이스를 구현만했다면 어떤 것인지 상관 없음.
+
+#### 의존관계
+- UserDao 오브젝트가 DConnectionManager 오브젝트를 사용하게 하려면 
+- -> 두 클래스의 오브젝트 사이에 런타임 사용관계 또는, 링크 또는 의존관계라고 불리는 관계를 맺어주면 됨
+
+#### 클라이언트 오브젝트
+- UserDao도 아니고, ConnectionMaker 구현 클래스도 아닌 
+- 제 3의 오브젝트인 UserDao의 클라이언트 오브젝트는 무슨 역할?
+- -> 클래스-인터페이스-클래스 구조를 이용해 런타임오브젝트 관계를 갖게 하는 구조로 만들어주는게 클라이언트의 책임
+```java
+public class UserDaoTest { // 클라이언트 오브젝트
+    public static void main(String[] args) throws ClassNotFoundException, SQLException {
+        ConnectionMaker connectionMaker = new DConnectionMaker();
+        UserDao dao = new UserDao(connectionMaker); //의존관계 설정 책임
+        //...
+    }
+}
+```
+
+### 원칙과 패턴
+- 위의 개선과정에서 적용된 원칙과 패턴
+#### 개방 폐쇄 원칙(OCP)
+- 클래스나 모듈은 확장에는 열려있고 변경에는 닫혀있어야 한다.
+- -> UserDao는 DB연결 방법이라는 기능확장에는 열려있으나, 핵심 구현 코드는 영향 받지 않음.
+#### 높은 응집도와 낮은 결합도

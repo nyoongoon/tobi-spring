@@ -5,14 +5,14 @@ import user.domain.User;
 import java.sql.*;
 
 public class UserDao {
-    private SimpleConnectionMaker simpleConnectionMaker;
+    private ConnectionMaker connectionMaker;
 
-    public UserDao(){
-        simpleConnectionMaker = new SimpleConnectionMaker();
+    public UserDao(ConnectionMaker connectionMaker){
+        this.connectionMaker = connectionMaker; // 클래스 이름이 나오는 중..
     }
 
     public void add(User user) throws ClassNotFoundException, SQLException{
-        Connection c = simpleConnectionMaker.makeNewConnection();
+        Connection c = connectionMaker.makeConnection();
         PreparedStatement ps = c.prepareStatement(
                 "insert into users(id, name, password) value(?,?,?)");
         ps.setString(1, user.getId());
@@ -26,7 +26,7 @@ public class UserDao {
     }
 
     public User get(String id) throws ClassNotFoundException, SQLException{
-        Connection c = simpleConnectionMaker.makeNewConnection();
+        Connection c = connectionMaker.makeConnection();
         PreparedStatement ps = c.prepareStatement(
                 "select * from users where id = ?");
         ps.setString(1, id);
@@ -43,23 +43,5 @@ public class UserDao {
         c.close();
 
         return user;
-    }
-
-    public static void main(String[] args)throws ClassNotFoundException, SQLException{
-        UserDao dao = new UserDao();
-        User user = new User();
-        user.setId("whiteship");
-        user.setName("백기선");
-        user.setPassword("married");
-
-        dao.add(user);
-
-        System.out.println(user.getId() + "등록성공");
-
-        User user2 = dao.get(user.getId());
-        System.out.println(user2.getName());
-        System.out.println(user2.getPassword());
-
-        System.out.println(user2.getId() + "조회성공");
     }
 }
