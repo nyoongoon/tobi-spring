@@ -247,4 +247,73 @@ public class DaoFactory {
 ```
 
 ### 제어권의 이전을 통한 제어관계 역전
+- 제어의 역전에서는 오브젝트가 자신이 사용할 오브젝트를 스스로 선택하거나 생성하지 않음.
+- 프로그램의 시작을 담당하는 main()과 같은 엔트리 포인트를 제외하면
+- -> 모든 오브젝트는 이렇게 위임받은 제어 권한을 갖는 특별한 오브젝트에 의해 결정됨
+- ex) 템플릿 메소드는 제어의 역전이라는 개념을 활용한 것.
+
+#### 라이브러리 vs 프레임워크
+- 코드가 라이브러리를 사용. 애플리케이션 흐름 직접 제어
+- 코드가 프레임워크에 의해 사용됨. 프레임워크가 흐름 제어.
+
+#### 제어의 역전에서 필요 요소
+- 프레임워크 또는 컨테이너와 같이 애플리케이션 컴포넌트의 생성과 관계 설정, 사용, 생명주기 관리 등을 관장하는 존재가 필요.
+
+## 스프링의 IoC
+- 스프링의 핵심은 "빈 팩토리" 또는 "어플리케이션 컨텍스트"라고 불리는 것.
+
+### 오브젝트 팩토리를 이용한 스프링 IoC
+- DaoFactory를 스프링에서 사용이 가능하도록 변신시키기..
+- **빈**이란 스프링이 제어권을 가지고, 직접 만들고, 관계를 부여하는 오브젝트
+- 스프링 빈은 스프링 컨테이너가 생성과 관계설정, 사용 등을 제어해주는 제어의 역전이 적용된 오브젝트.
+- **빈 팩토리**란 스프링에서는 빈의 생성과 관계 설정같은 제어를 담당하는 IoC 오브젝트
+- -> 보통 빈팩토리보다 이를 더 확장한 **애플리케이션 컨텍스트**를 주로 사용
+- -> 애플리케이션 컨텍스트는 IoC방식을 따라 만들어진 일종의 빈 팩토리.
+
+#### 애플리케이션 컨텍스트
+- 애플리케이션 컨텍스트는 별도의 정보를 참고해서 빈(오브젝트)의 생성, 관계설정 등의 제어 작업을 총괄.
+- **별도의 설정정보**를 담고 있는 무엇인가를 가져와 이를 활용하는 범용적인 IoC 엔진
+- -> 그 자체로는 애플리케이션의 로직을 담당하지 않지만
+- -> IoC를 이용해 애플리케이션 컴포넌트를 생성하고, 사용할 관계를 맺어주는 책임
+
+#### DaoFactory를 사용하는 애플리케이션 컨텍스트
+- DaoFactory를 스프링의 빈 팩토리가 사용할 수 있는 본격적인 설정정보로 만들어보기
+- -> 먼저 스프링이 빈 팩토리를 위한 오브젝트 설정을 담당하는 클래스라고 인식할 수 있도록 @Configuration 추가
+- -> 그리고 오브젝트를 만들어주는 메소드에 @Bean이라는 애노테이션을 붙여줌.
+```java
+@Configuration
+public class DaoFactory {
+    @Bean
+    public UserDao userDao(){
+        return new UserDao(connectionMaker());
+    }
+    @Bean
+    public ConnectionMaker connectionMaker(){
+        return new DConnectionMaker();
+    }
+}
+```
+- 이제 DaoFactory를 설정정보로 사용하는 애플리케이션 컨텍스트를 만들기.
+- **애플리케이션 컨텍스트는** ApplicationContext 타입의 오브젝트.
+- ApplicationContext를 구현한 클래스는 여러가지가 있는데,
+- DaoFactory처럼 @Configuration이 붙은 자바 코드를 설정정보로 사용하려면
+- AnnotaionCaonfigApplicationContext를 이용하면 됨.
+- 애플리케이션 컨텍스트를 만들 때 생성자 파라미터로 DaoFactory 클래스를 넣어줌. 
+- -> 이렇게 준비된 ApplicationContext의 getBean()이라는 메소드를 이용해 UserDao의 오브젝트를 가져올 수 있음.
+```java
+public class UserDaoTest {
+    public static void main(String[] args) throws ClassNotFoundException, SQLException {
+        ApplicationContext context = 
+                new AnnotationConfigApplicationContext(DaoFactory.class);
+        UserDao dao = context.getBean("userDao", UserDao.class);
+        //...
+    }
+}
+```
+- -> getBean()의 파라미터인 "userDao"는 ApplicationContext에 등록된 빈의 이름
+- @Bean이라는 애노테이션을 userDao라는 이름의 메소드에 붙였는데, 메소드 이름이 바로 빈의 이름이 됨
+
+##### 메소드 이름을 빈의 이름으로 사용하는 이유 
+- 그런데 UserDao를 가져오는 메소드는 하나뿐인데 이름을 사용하는 이유?
+- -> 오브젝트 생성하는 방식이나 구성을 다르게 가져가는 메소드를 추가할 수 있음.
 - 
