@@ -176,3 +176,75 @@ public class UserDaoTest { // 클라이언트 오브젝트
 - 클래스나 모듈은 확장에는 열려있고 변경에는 닫혀있어야 한다.
 - -> UserDao는 DB연결 방법이라는 기능확장에는 열려있으나, 핵심 구현 코드는 영향 받지 않음.
 #### 높은 응집도와 낮은 결합도
+- "응집도"가 높다는 건 모듈, 클래스가 하나의 책임 또는 관심사에만 집중되어 있다는 뜻.
+- "결합도"는 하나의 오브젝트가 변경이 일어날 때에 관계를 맺고 있는 다른 오브젝트에게 변화를 요구하는 정도
+
+#### 전략 패턴 (-> 대체 가능한 전략)
+- 개선한 UserDaoTest-UserDao-ConnectionMaker 구조를 디자인 패턴으로 보면 
+- -> 전략 패턴에 해당함. - 개방 폐쇄 원칙 실현에 가장 잘 들어맞음
+- **자신의 기능맥락(context) <- 에서 필요에 따라 변경가능한 알고리즘(기능)을 외부로 분리**
+- "전략 패턴"은 자신의 기능맥락(context)에서, 필요에 따라 변경이 필요한 알고리즘을 
+- -> 인터페이스를 통해 통째로 외부로 분리시키고
+- -> 이를 구현한 알고리즘 클래스를 필요에 따라 바꿔서 사용
+##### 전략패턴 예시
+- 위에서 구현한 UserDao는 전략패턴의 **컨텍스트**
+- 컨텍스트는 자신의 기능을 수행하는데 필요한 기능 중에서
+- -> "변경 가능"한 DB 연결방식이라는 알고리즘을 ConnectionMaker라는 인터페이스로 정의,
+- -> 이를 구현한 클래스, 즉 전략을 바꿔가면서 사용할 수 있게 분리함.
+- -> 전략패턴에서 "클라이언트"는 컨텍스트가 사용할 전략을 컨텍스트의 생성자를 통해 제공해주는 게 일반적
+
+
+## 제어의 역전(IoC) - p.89
+- 위의 UserDaoTest의 기능을 분리하기
+- -> UserDao와 ConnectionMaker 구현 클래스의 오브젝트를 만드는 것과,
+- -> 그렇게 만들어진 두 개의 오브젝트가 연결돼서 사용될 수 있게 관계 맺어주는 것.
+
+### 팩토리
+- "팩토리" 오브젝트로 분리
+- -> 이 클래스의 역할은 객체의 생성 방법을 결절하고 그렇게 만들어진 오브젝트를 돌려주는 것.
+- cf) 추상팩토리 패턴, 팩토리 메소드 패턴과는 다름
+```java
+public class DaoFactory {
+    public UserDao userDao(){
+        ConnectionMaker connectionMaker = new DConnectionMaker();
+        UserDao userDao = new UserDao(connectionMaker);
+        return userDao;
+    }
+}
+```
+```java
+public class UserDaoTest {
+    public static void main(String[] args) throws ClassNotFoundException, SQLException {
+        UserDao dao = new DaoFactory().userDao();
+        //...
+    }
+}
+```
+
+#### 설계도로서의 팩토리
+- 팩토리 클래스는 로직 오브젝트를 구성하고, 관계를 정의하는 책임
+- -> 애플리케이션을 구성하는 컴포넌트의 구조와 관계를 정의한 설계도 같은 역할
+- -> 어떤 오브젝트가 어떤 오브젝트를 사용하는지 정의해놓은 코드
+- -> 팩토리 클래스를 분리하여, 컴포넌트역할을 하는 오브젝트(로직)와, 구조를 결정하는 오브젝트(팩토리)를 분리해냄
+
+#### 오브젝트 팩토리의 활용
+- ConnectionMaker의 구현 클래스를 결정하고, 오브젝트를 만드는 코드를 별도로 분리
+```java
+public class DaoFactory {
+    public UserDao userDao(){
+        return new UserDao(connectionMaker());
+    }
+    public AccountDao accountDao(){
+        return new AccountDao(connectionMaker());
+    }
+    public MessageDao messageDao(){
+        return new AccountDao(connectionMaker());
+    }
+    public ConnectionMaker connectionMaker(){
+        return new DConnectionMaker();
+    }
+}
+```
+
+### 제어권의 이전을 통한 제어관계 역전
+- 
