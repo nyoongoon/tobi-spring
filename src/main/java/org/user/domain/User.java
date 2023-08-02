@@ -1,4 +1,4 @@
-package user.domain;
+package org.user.domain;
 
 public class User{
     String id;

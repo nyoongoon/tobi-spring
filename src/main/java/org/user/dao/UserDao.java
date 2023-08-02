@@ -1,6 +1,6 @@
-package user.dao;
+package org.user.dao;
 
-import user.domain.User;
+import org.user.domain.User;
 
 import java.sql.*;
 
