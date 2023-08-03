@@ -9,6 +9,7 @@ public class UserDao {
 
     public UserDao(ConnectionMaker connectionMaker){
         this.connectionMaker = connectionMaker; // 클래스 이름이 나오는 중..
+        System.out.println(connectionMaker.toString());
     }
 
     public void add(User user) throws ClassNotFoundException, SQLException{
