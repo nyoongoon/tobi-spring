@@ -536,3 +536,87 @@ public UserDao(){
 - 외부에서 파라미터로 오브젝트를 넘겨줬다고 다 DI가 아님
 - -> 주입받는 메소드 파라미터가 이미 특정 타입으로 고정되어 있다면 DI 일어날 수 없음
 - -> DI에서 말하는 주입은 다이나믹하게 구현클래스를 결정해서 제공받을 수 있도록 **인터페이스 타입의 파라미터를 통해 이뤄져야함** !
+
+### 메소드를 이용한 의존관계 주입
+- 수정자 메소드(setter)를 이용한 주입 -> xml로 의존관계 정보 만들 떄 편리..?
+- 일반 메소드를 이용한 주입 
+
+## XML을 이용한 설정
+- 컴파일 같은 별도의 빌드 작업이 없다는 장점.
+### XML 설정
+- 스프링 애플리케이션 컨텍스트는 XML에 담긴 DI정보를 활용할 수 있음.
+- DI정보가 담긴 XML 파일은 \<beans\>를 루트 엘리먼트로 사용
+- @Configuration을 \<beans\>, @Bean을 \<bean\>에 대응
+#### @Bean의 DI 정보 세가지
+- 빈의 이름 : @Bean메소드 이름이 빈의 이름
+- 빈의 클래스 : 빈 오브젝트를 어떤 클래스를 이용해서 만들지
+- 빈의 의존 오브젝트 : 빈의 생성자나 메소드를 통해 의존 오브젝트를 넣어줌
+- -> XML에서도 이 세가지 정보를 정의. 
+- -> 세터 주입인 경우, 세터 메소드는 프로퍼티가 됨(set제외부분)
+```
+userDao.setConnectionMaker(connectionMake());
+=>
+<property name="connectionMaker" ref="connectionMaker" />
+```
+
+#### XML의 의존관계 주입 정보
+```xml
+<beans>
+    <bean id="connectionMaker" class="springbook.user.daoDConnectionMaker"/>
+    <bean id="userDao" class="springbook.user.dao.UserDao">
+        <property name="connectionMaker" ref="connectionMaker"/>
+    </bean>
+</beans>
+```
+- \<property\>태그의 name과 ref 차이점 주의
+- name 애트리뷰트는 DI에 사용할 수정자 메소드의 프로퍼티 이름.
+- ref 애트리뷰트는 주입할 오브젝트를 정의한 빈의 ID.
+
+### XML을 이용하는 애플리케이션 컨텍스트
+- XML에서 빈의 의존관계 정보를 이용하는 작업에는
+- -> GenericXmlApplicationContext를 사용.
+- GenericXmlApplicationContext의 생성자 파라미터로 XML파일의 클래스패스를 지정해주면 됨.
+- -> 애플리케이션 컨텍스트가 사용하는 XML 설정파일의 이름은 관례에 따라 applicationContext.xml이라고 만듬
+```
+ApplicationContext context = 
+    new GenericXmlApplicationContext("applicatoinContext.xml");
+```
+- ClassPathXmlApplicationContext는 XML 파일을 클래스패스에서 가져올 때 편리한 기능 추가
+- -> 특정 상황이 아니라면 GenericXmlApplicationContext이 무난
+
+## **DataSource 인터페이스**로 변환
+- 자바에서는 DB 커넥션을 가져오는 오브젝트의 기능을 추상화해서 비슷한 용도로 사용할 수 있게 만들어진
+- -> DataSource라는 인터페이스가 이미 존재함.
+- -> 일반적으로 DataSource 인터페이스는 많은 메소드를 갖고 있어서 직접 구현하기엔 부담스러울 수 있음
+- -> 구현된 DataSource 구현 클래스가 많이 존재.
+- -> 대개 DataSource 인터페이스에서 실제로 관심 가질 것은 getConnection() 하나.
+
+```java
+import java.sql.SQLException;
+
+public interface DataSource extends CommonDataSource, Wrapper {
+    Connection getConnection() throws SQLException;
+    // ...
+}
+```
+- DataSource 구현 클래스 사용하도록 UserDao 리팩토링하기
+- DataSource의 getConntection()은 SqlException만 던지기 떄문에
+- -> makeConnection()메소드의 throws에 선언했던 ClassNotFoundException은 제거해도 됨.
+
+```java
+import javax.sql.DataSource;
+import java.sql.SQLException;
+
+public class UserDao {
+    private DataSource dataSource;
+
+    public void setDataSource(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    public void add(User user) throws SQLException{
+        Connection c = dataSource.getConnection();
+    }
+    // ...
+}
+```
