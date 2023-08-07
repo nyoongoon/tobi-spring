@@ -554,7 +554,7 @@ public UserDao(){
 - -> XML에서도 이 세가지 정보를 정의. 
 - -> 세터 주입인 경우, 세터 메소드는 프로퍼티가 됨(set제외부분)
 ```
-userDao.setConnectionMaker(connectionMake());
+userDao.setConnectionMaker(connectionMaker());
 =>
 <property name="connectionMaker" ref="connectionMaker" />
 ```
@@ -620,3 +620,68 @@ public class UserDao {
     // ...
 }
 ```
+- 단순한 구현 클래스인 SimpleConnectionMaker 사용
+```java
+@Configuration
+public class DaoFactory {
+    @Bean
+    public DataSource dataSource() {
+        SimpleDriverDataSource dataSource = new SimpleDriverDataSource();
+
+        dataSource.setDriverClass(com.mysql.jdbc.Driver.class);
+        dataSource.setUrl("jdbc:mysql://localhost/springbook");
+        dataSource.setUsername("spring");
+        dataSource.setPassword("book");
+
+        return dataSource;
+    }
+
+    @Bean
+    public UserDao userDao() {
+//        return new UserDao(connectionMaker());
+        UserDao userDao = new UserDao();
+        userDao.setDataSource(dataSource());
+        return userDao;
+    }
+}
+```
+
+### XML 설정 방식
+- dataSource라는 이름의 \<bean\>을 등록하기
+```xml
+<bean id="dataSource" 
+    class="org.springframework.jdbc.datasource.SimpleDriverDataSource"/>
+```
+- -> 하지만 위의 설정으로 SimpleDriverDataSource의 오브젝트를 만드는 것까지는 가능하지만,
+- -> setter로 넣어준 DB접속정보는 나타나있지 않음
+- -> setter의 파라미터 값은 빈이 아니므로 기존처럼 \<property\> 태그로 넣어줄 수 없음.
+- -> **xml는 어떻게 dataSource() 메소드처럼 DB 연결정보를 Class타입 오브젝트나 텍스트 값으로 넣어줄 수 있을까?**
+
+### 프로퍼티 값의 주입 (세터 값 주입)
+- 이렇게 다른 빈 오브젝트의 레퍼런스가 아닌 단순 정보(DB연결정보 - Class타입 오브젝트나 텍스트)도 
+- -> 초기화 과정에서 세터 메소드에 넣을 수 있음
+- -> @Configuraion 클래스 외부에서 DB정보 같이 변경 가능한 정보를 설정할 수 있도록..
+- 이렇게 텍스트나 단순 오브젝트 등을 수정자 메소드에 넣어주는 것을 스프링에서는 **값 주입**이라고 함. (일종의 DI)
+- -> 빈 오브젝트의 레퍼런스가 아니라, 단순 값을 주입해주는 것이기 때문에 value 애트리뷰트 사용
+```
+dataSource.setDriverClass(com.mysql.jdbc.Driver.class);
+dataSource.setUrl("jdbc:mysql://localhost/springbook");
+dataSource.setUsername("spring");
+dataSource.setPassword("book");
+```
+```
+<property name="driverClass" value="com.mysql.jdbc.Driver" />
+<property name="url" value="jdbc:mysql://localhost/springbook" />
+<property name="username" value="spring" />
+<property name="password" value="book" />
+```
+#### value 값의 자동 변환
+- driverClass는 스트링 타입이 아니라, java.lang.Class 타입. -> xml에서는 타입정보 없이 텍스트 형태로 value에 들어가 있음.
+- -> 스프링이 setter 파라미터 타입을 참고해서 변환해줌. 
+```
+//내부적으로 변환되는 코드
+Class driverClass = Class.forName("com.mysql.jdbc.Driver");
+dataSource.setDriverClass(driverClass);
+```
+- -> 스프링은 value에 지정된 텍스트 값을 적절한 자바타입으로 변환해줌. 
+- // 142
