@@ -1,9 +1,13 @@
 package org.user.dao;
 
-import com.sun.org.apache.xerces.internal.util.PropertyState;
+import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.user.domain.User;
 
 import java.sql.SQLDataException;
@@ -11,18 +15,27 @@ import java.sql.SQLException;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertThrows;
 
-
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(locations="DaoFactory.java")
 public class UserDaoTest {
+
+    @Autowired
+    private UserDao dao;
+    private User user1;
+    private User user2;
+    private User user3;
+
+
+    @Before
+    public void setUp(){
+        this.user1  = new User("gyumee", "박성철", "springno1");
+        this.user2 = new User("leegw700", "이길원", "springno2");
+        this.user3 = new User("bumjin", "박범진", "springno3");
+    }
+
     @Test
     public void addAndGet() throws SQLException {
-        ApplicationContext context =
-                new AnnotationConfigApplicationContext(DaoFactory.class);
-
-        UserDao dao = context.getBean("userDao", UserDao.class);
-        User user1 = new User("gyumee", "박성철", "springno1");
-        User user2 = new User("leegw700", "이길원", "springno2");
 
         dao.deleteAll();
         assertThat(dao.getCount(), is(0));
@@ -42,12 +55,6 @@ public class UserDaoTest {
 
     @Test
     public void count() throws SQLException{
-        ApplicationContext context =
-                new AnnotationConfigApplicationContext(DaoFactory.class);
-        UserDao dao = context.getBean("userDao", UserDao.class);
-        User user1 = new User("gyumee", "박성철", "springno1");
-        User user2 = new User("leegw700", "이길원", "springno2");
-        User user3 = new User("bumjin", "박범진", "springno3");
 
         dao.deleteAll();
         assertThat(dao.getCount(), is(0));
@@ -64,9 +71,6 @@ public class UserDaoTest {
 
     @Test(expected = SQLDataException.class)
     public void getUserFailuer() throws SQLException{
-        ApplicationContext context =
-                new AnnotationConfigApplicationContext(DaoFactory.class);
-        UserDao dao = context.getBean("userDao", UserDao.class);
         dao.deleteAll();
         assertThat(dao.getCount(), is(0));
 

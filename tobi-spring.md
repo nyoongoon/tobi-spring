@@ -742,3 +742,90 @@ assertThat(user2.getName(), is(user.getName()));
 - 테스트는 코드를 작성한 후에 가능한 빨리 실행할 수 있어야함. -> 테스트를 먼저 만들면 코딩이 끝나자마자 테스트 실행 가능
 
 ## 테스트 코드 개선
+- 테스트 실행할 때마다 반복되는 준비작업을 메소드에넣고, 테스트 메소드 실행전에 자동 실행시켜줌
+
+### @Before
+```
+@Before
+public void setUp(){
+    ApplicationContext context =
+            new AnnotationConfigApplicationContext(DaoFactory.class);
+    
+    this.dao = context.getBean("userDao", UserDao.class);
+}
+```
+
+### JUnit 작동 내부 순서 
+- 1. 테스트 클래스에서 @Test가 붙은 public이고 void형이며 파라미터가 없는 테스트 메소드 모두 찾음
+- 2. 테스트 클래스의 오브젝트 하나 만듬 <<-- 주의 : 하나의 테스트 메소드만 사용하고 재사용x
+- 3. @Before가 붙은 메소드가 있으면 실행
+- 4. @Test가 붙은 메소드를 하나 호출하고 테스트 결과를 저장해둠
+- 5. @After가 붙은 메소드가 있으면 실행함
+- 6. 나머지 테스트 메소드에 대해 2~5 반복
+- 7. 모든 테스트 결과 종합하여 리턴
+
+#### 테스트 클래스 오브젝트
+- 각 테스트가 영향을 주지 않고 독립적으로 실행됨을 보장하기 위해 매번 새로운 오브젝트를 만들게 함. 
+- -> 인스턴스 변수 부담없이 사용가능. 
+
+### 픽스처
+- 테스트 수행하는데 필요한 정보나 오브젝트를 픽스처(fixture)라고 함. 
+- UserDaoTest에서 dao가 대표적인 픽스처 
+
+## 테스트를 위한 애플리케이션 컨텍스트 관라
+### 스프링 테스트 컨텍스트 프레임워크 적용
+```
+@Before
+public void setUp(){
+    ApplicationContext context =
+            new AnnotationConfigApplicationContext(DaoFactory.class);
+    //...
+}
+```
+- 현재 테스트 메소드 만듬 애플리케이션 컨텍스트가 생성되고 있음.
+- -> 애플리케이션 컨텍스트가 만들어 질때 모든 싱글톤 빈 오브젝트를 초기화함
+- -> 성능도 부담스럽고, 빈이 할당한 리소스 깔끔하게 정리하지 않으면 문제 여지 있음
+- -> 빈은 싱글톤으로 만들었기 때문에 상태를 갖지 않음. -> 애플리케이션 컨텍스트 한 번만 만들기
+- -> 테스트 컨텍스트 프레임워크 사용 
+```
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(locations="DaoFactory.java")
+public class UserDaoTest {
+
+    @Autowired
+    private ApplicationContext context; // <<-- @Autowired는 빈을 찾아주는데, ApplicationContext도 찾아줬다..?
+    //...
+}
+```
+
+#### @RunWith
+- @RunWith은 JUnit 프레임워크의 테스트 실행 방법을 확장할 때 사용하는 애노테이션
+- SpringJUnit4ClasRunner라는 JUnit용 테스트 컨텍스트 프레임워크 확장 클래스 지정하면
+- -> Junit이 테스트 진행하는 중에 테스트가 사용할 애플리케이션 컨텍스트 만들고 관리하는 작업을 진행해줌. 
+#### @ContextConfiguration
+- 자동으로 만들어줄 애플리케이션 컨텍스트의 설정파일 위치를 지정. 
+
+### 테스트 클래스의 컨텍스트 공유 
+- 여러개의 테스트 클래스가 있는데 모두 같은 설정파일을 가진 애플리케이션 컨텍스트를 사용한다면
+- -> 스프링은 테스트 클래스 사이에서도 애플리케이션 컨텍스트를 공유하게 해줌
+- ex)
+```java
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(locations="DaoFactory.java")
+public class UserDaoTest {}
+
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(locations="DaoFactory.java")
+public class GroupDaoTest {}
+```
+
+#### @Autowired
+- @Autowired가 붙은 인스턴스 변수가 있으면, 테스트 컨텍스트 프레임워크는 변수타입과 일치하는 컨텍스트 내의 빈을 찾음
+##### 중요 - @Autowired는 빈을 찾아주는데, ApplicationContext도 찾아줬다..?
+- 스프링 **애플리케이션 컨텍스트는 초기화할 때 자기 자신도 빈으로 등록함** !!!
+- -> 애플리케이션 컨텍스트에는 ApplicationContext 타입의 빈이 존재하는 것이고 DI도 가능한 것임
+- -> @Autowired를 이용해 애플리케이션 컨텍스트가 갖고 있는 빈을 DI 받을 수 있따면 
+- -> 굳이 컨텍스트를 가져와 getBean()을 사용하는 것이 아니라, 아예 UserDao빈을 직접 DI 받을 수 있을 것.
+##### @Autowired 시 같은 타입의 빈이 두 개 이상 있는 경우
+- -> 변수 이름과 같은 이름의 빈이 있는지 확인 
+##### 인
