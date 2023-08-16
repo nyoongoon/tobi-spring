@@ -782,7 +782,7 @@ public void setUp(){
     //...
 }
 ```
-- 현재 테스트 메소드 만듬 애플리케이션 컨텍스트가 생성되고 있음.
+- 현재 테스트 메소드 만큼 애플리케이션 컨텍스트가 생성되고 있음.
 - -> 애플리케이션 컨텍스트가 만들어 질때 모든 싱글톤 빈 오브젝트를 초기화함
 - -> 성능도 부담스럽고, 빈이 할당한 리소스 깔끔하게 정리하지 않으면 문제 여지 있음
 - -> 빈은 싱글톤으로 만들었기 때문에 상태를 갖지 않음. -> 애플리케이션 컨텍스트 한 번만 만들기
@@ -828,4 +828,73 @@ public class GroupDaoTest {}
 - -> 굳이 컨텍스트를 가져와 getBean()을 사용하는 것이 아니라, 아예 UserDao빈을 직접 DI 받을 수 있을 것.
 ##### @Autowired 시 같은 타입의 빈이 두 개 이상 있는 경우
 - -> 변수 이름과 같은 이름의 빈이 있는지 확인 
-##### 인
+- 
+## DI와 테스트
+- 효과적인 테스트를 위해서라도 DI를 적용해야만 함.
+- -> DI는 테스트가 작은 단위의 대상에 대해 독립적으로 만들어지고 실행되게 하는데 중요한 역할을 함. 
+### 테스트 코드에 의한 DI
+- DI는 스프링 컨테이너만 할 수 있는 작업 아님. 오브젝트 팩토리 예제에서 직접 DI했었음
+- UserDao의 세터메소드도 테스트 코드에서도 얼마든지 호출해서 사용가능
+#### UserDao가 사용할 DataSource 테스트
+- applicationContext.xml에 정의된 DataSource 빈은 서버용이라고하면
+- -> 테스트코드를 위한 DI를 이용해서 테스트용 DataSource를 주입
+```
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(locations = "DaoFactory.java")
+@DirtiesContext
+public class UserDaoTest {
+    @Before
+    public void setUp() {
+        DataSource dataSource = new SingleConnectionDataSource(
+                "jdbc:mysql://localhost/testdb", "spring", "book", true);
+        dao.setDataSource(dataSource);
+        //...
+    }
+    //...
+} 
+```
+- 이 방식은 매우 주의해서 사용해야함
+- -> 이미 테스트 애플리케이션 컨텍스트에서 구성한 의존관계를 강제로 변경했기 때문
+- -> 애플리케이션 컨텍스트의 구성이나 상태를 변경하지 않는 것이 원칙.-> 다른 모든 테스트의 영향
+- -> @DirtiesContext
+##### @DirtiesContext
+- 스프링의 테스트 컨텍스트 프레임워크에게 해당 클래스의 테스트에서 애플리케이션 컨텍스트의 상태를 변경한다는 것을 알려줌
+- -> 텍스트 컨텍스트는 이 @DirtiesContext 애노테이션이 붙은 테스트 클래스에는 애플리케이션 컨텍스트를 공유 허용하지 않음. 
+- -> **이곳에서 테스트 메소드를 수행하고 나면 매번 새로운 애플리케이션 컨텍스트가 생성**됨.
+- cf) 메소드 레벨에서 사용 가능. 
+
+### 테스트를 위한 별도의 DI 설정
+- -> 테스트에서 사용될 클래스가 빈으로 정의된 테스트 전용 설정파일을 따로 만들어두는 방법이 더 좋다 !
+```
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(locations = "TestDaoFactory.java")
+public class UserDaoTest {...}
+```
+
+### 컨테이너 없는 DI 테스트 <<-- 토비 추천
+```
+public class UserDaoTest{
+    UserDao dao; //@Autowired가 없음
+    
+    @Before
+    public void setUp(){
+        dao = new UserDao(); //직접 생성
+        DataSource dataSource = new SingleConnectionDataSoure(
+            :jdbc://mysql://localhost/testdb", "spring", "book", true);
+        dao.setDataSource(dataSource); // 컨테이너 사용X
+    }    
+```
+
+#### DI를 이용한 테스트 방법 선택
+- 항상 스프링 컨테이너 없이 테스트할 수 있는 방법을 우선적을 고려.
+- -> 복잡한 의존관계를 갖고 있으면 스프링의 설정을 이용한 DI 이용. -> 테스트 전용 의존관계설정파일 따로 생성하기.
+- -> 컨텍스트에서 DI받은 오브젝트 다시 수동 DI하는 경우 -> @DirtiesContext
+
+
+# 학습테스트로 배우는 스프링
+- 자신이 만들지 않은 코드에 대한 테스트 작성 -> 이를 "학습테스트"라고 함
+- -> 학습 테스트는 테스트 대상보다는 테스트 코드 자체에 관심을 갖고 만들어야함.
+
+## 학습 테스트 예제
+### JUnit 테스트 오브젝트 테스트
+- 

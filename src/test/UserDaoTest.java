@@ -6,10 +6,13 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.user.domain.User;
 
+import javax.sql.DataSource;
 import java.sql.SQLDataException;
 import java.sql.SQLException;
 
@@ -17,7 +20,8 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
 
 @RunWith(SpringJUnit4ClassRunner.class)
-@ContextConfiguration(locations="DaoFactory.java")
+@ContextConfiguration(locations = "org/user/dao/DaoFactory.java")
+@DirtiesContext
 public class UserDaoTest {
 
     @Autowired
@@ -28,8 +32,12 @@ public class UserDaoTest {
 
 
     @Before
-    public void setUp(){
-        this.user1  = new User("gyumee", "박성철", "springno1");
+    public void setUp() {
+        DataSource dataSource = new SingleConnectionDataSource(
+                "jdbc:mysql://localhost/testdb", "spring", "book", true);
+        dao.setDataSource(dataSource);
+
+        this.user1 = new User("gyumee", "박성철", "springno1");
         this.user2 = new User("leegw700", "이길원", "springno2");
         this.user3 = new User("bumjin", "박범진", "springno3");
     }
@@ -54,7 +62,7 @@ public class UserDaoTest {
     }
 
     @Test
-    public void count() throws SQLException{
+    public void count() throws SQLException {
 
         dao.deleteAll();
         assertThat(dao.getCount(), is(0));
@@ -70,7 +78,7 @@ public class UserDaoTest {
     }
 
     @Test(expected = SQLDataException.class)
-    public void getUserFailuer() throws SQLException{
+    public void getUserFailuer() throws SQLException {
         dao.deleteAll();
         assertThat(dao.getCount(), is(0));
 
