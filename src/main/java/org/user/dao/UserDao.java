@@ -5,7 +5,7 @@ import org.user.domain.User;
 import javax.sql.DataSource;
 import java.sql.*;
 
-public class UserDao {
+public abstract class UserDao {
     private DataSource dataSource;
 
     public void setDataSource(DataSource dataSource) {
@@ -37,7 +37,7 @@ public class UserDao {
 
         User user = null;
 
-        if(rs.next()){ // 조회결과가 null이라도 코드가 진행될 수 있게 수정
+        if (rs.next()) { // 조회결과가 null이라도 코드가 진행될 수 있게 수정
             user = new User();
             user.setId(rs.getString("id"));
             user.setName(rs.getString("name"));
@@ -48,35 +48,72 @@ public class UserDao {
         ps.close();
         c.close();
 
-        if(user == null) throw new SQLDataException();
+        if (user == null) throw new SQLDataException();
 
         return user;
     }
 
-    public void deleteAll() throws SQLException{
-        Connection c = dataSource.getConnection();
-
-        PreparedStatement ps = c.prepareStatement(("delete from uers"));
-
-        ps.executeUpdate();
-
-        ps.close();
-        c.close();
+    public void deleteAll() throws SQLException {
+        Connection c = null;
+        PreparedStatement ps = null;
+        try {
+            c = dataSource.getConnection();
+//            ps = c.prepareStatement("delete from users");
+            ps = makeStatemet(c); // 변하는 부분을 메소드로 추출하고 변하지 않는 부분에서 호출하도록 수정
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw e;
+        } finally {
+            if (ps != null) {
+                try {
+                    ps.close();
+                } catch (SQLException e) {
+                }
+            }
+            if(c != null){
+                try{
+                    c.close();
+                }catch (SQLException e){
+                }
+            }
+        }
     }
 
-public int getCount() throws SQLException{
-        Connection c = dataSource.getConnection();
+   abstract protected PreparedStatement makeStatemet(Connection c) throws SQLException;
 
-        PreparedStatement ps = c.prepareStatement("select count(*) from users");
+    public int getCount() throws SQLException {
+        Connection c = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
 
-        ResultSet rs = ps.executeQuery();
-        rs.next();
-        int count = rs.getInt(1);
+        try{
+            c = dataSource.getConnection();
+            ps = c.prepareStatement("select count(*) from users");
 
-        rs.close();
-        ps.close();
-        c.close();
-
-        return count;
-}
+            rs = ps.executeQuery();
+            rs.next();
+            return rs.getInt(1);
+        }catch (SQLException e){
+            throw e;
+        }finally {
+            if(rs != null){
+                try{
+                    rs.close();
+                }catch (SQLException e){
+                }
+            }
+            if( ps != null){
+                try{
+                    ps.close();
+                }catch (SQLException e){
+                }
+            }
+            if(c != null){
+                try{
+                    c.close();
+                }catch (SQLException e){
+                }
+            }
+        }
+    }
 }

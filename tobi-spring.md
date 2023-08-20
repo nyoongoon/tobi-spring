@@ -891,10 +891,199 @@ public class UserDaoTest{
 - -> 컨텍스트에서 DI받은 오브젝트 다시 수동 DI하는 경우 -> @DirtiesContext
 
 
-# 학습테스트로 배우는 스프링
+## 학습테스트로 배우는 스프링
 - 자신이 만들지 않은 코드에 대한 테스트 작성 -> 이를 "학습테스트"라고 함
 - -> 학습 테스트는 테스트 대상보다는 테스트 코드 자체에 관심을 갖고 만들어야함.
 
-## 학습 테스트 예제
-### JUnit 테스트 오브젝트 테스트
-- 
+### 학습테스트 AND 버그 테스트
+
+
+
+# 3장 템플릿
+- 변경이 잦은 성질으로부터, 일정 패턴으로 유지되는 부분을 독립시키는 방법
+
+## 다시보는 초난감 DAO
+- UserDao에 남은 문제점 -> 예외상황에 대한 처리
+### 예외처리 기능을 갖춘 DAO
+- DB커넥션이라는 제한적 리소스 공유하는 JDBC코드에 반드시 예외처리 필요함
+#### JDBC 수정 기능의 예외처리 코드
+```java
+public class ex {
+    public void deleteAll() throws SQLException {
+        Connection c = dataSource.getConnection();
+        PreparedStatement ps = c.prepareStatme("delete from users");
+        ps.executeUpdate(); // 예외 발생하면 메소드 실행이 중단됨
+        ps.close(); // 자원처리를 못할 위험 존재
+        c.close();
+    }
+}
+```
+
+- Connection과 PreparedStatement라는 두 개의 공유 리소스를 close하지 못하고 반환되지 않을 위험이 있음. -> 예외처리 필요.
+- cf) Connection과 PreparedStatment는 보통 pool 방식으로 운영됨.
+
+```java
+import java.sql.SQLException;
+
+public class ex {
+    public void deleteAll() throws SQLException {
+        Connection c = null;
+        PreparedStatement ps = null;
+        try {
+            c = dataSource.getConnection();
+            ps = c.prepareStatement("delete from users");
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw e;
+        } finally {
+            if (ps != null) {
+                try {
+                    ps.close();
+                } catch (SQLException e) {
+                }
+            }
+            if(c != null){
+                try{
+                    c.close();
+                }catch (SQLException e){
+                }
+            }
+        }
+    }
+}
+```
+```java
+public class ex{
+    public int getCount() throws SQLException {
+        Connection c = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+
+        try{
+            c = dataSource.getConnection();
+            ps = c.prepareStatement("select count(*) from users");
+
+            rs = ps.executeQuery();
+            rs.next();
+            return rs.getInt(1);
+        }catch (SQLException e){
+            throw e;
+        }finally {
+            if(rs != null){
+                try{
+                    rs.close();
+                }catch (SQLException e){
+                }
+            }
+            if( ps != null){
+                try{
+                    ps.close();
+                }catch (SQLException e){
+                }
+            }
+            if(c != null){
+                try{
+                    c.close();
+                }catch (SQLException e){
+                }
+            }
+        }
+    }
+}
+```
+
+## 변하는 것과 변하지 않는 것
+### JDBC try/catch/finally 코드의 문제점
+- -> 리소스 반환 코드가 흩어져있다보니 빠뜨릴 가능성 존재
+- -> 문제의 핵심은 변하지 않는 코드를 잘 분리해내는 작업. 
+### 분리와 재사용을 위한 디자인 패턴 적용
+- 비슷한 기능의 메소드에서 동일하게 나타날 수 있는 고정된 부분과
+- 비즈니스 로직에 따라 변할 수 있는 부분을 분리
+#### 메소드 추출
+```java
+class ex{
+    public void deleteAll() throws SQLException {
+        Connection c = null;
+        PreparedStatement ps = null;
+        try {
+            c = dataSource.getConnection();
+//            ps = c.prepareStatement("delete from users");
+            ps = makeStatemet(c); // 변하는 부분을 메소드로 추출하고 변하지 않는 부분에서 호출하도록 수정
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw e;
+        } finally {
+            if (ps != null) {
+                try {
+                    ps.close();
+                } catch (SQLException e) {
+                }
+            }
+            if(c != null){
+                try{
+                    c.close();
+                }catch (SQLException e){
+                }
+            }
+        }
+    }
+
+    private PreparedStatement makeStatemet(Connection c) throws SQLException{
+        PreparedStatement ps;
+        ps = c.prepareStatement("delete from users");
+        return ps;
+    }
+}
+```
+- 분리시킨 메소드를 재사용할 수 있어야하는데 반대로 됨.
+
+#### 템플릿 메소드 패턴의 적용
+- 템플릿 메소드 패턴은 상속을 통해 기능을 확장해서 사용하는 부분
+- -> 변하지 않는 부분을  슈퍼클래스에 두고, 변하는 부분은 추상메소드로 정의해둬서, 서브클래스에서 오버라이드
+```
+abstract protected PreparedStatement makeStatemet(Connection c) throws SQLException;
+```
+```java
+public class UserDaoDeleteAll extends UserDao{
+    @Override
+    protected PreparedStatement makeStatemet(Connection c) throws SQLException {
+        PreparedStatement ps = c.prepareStatement("delete from users");
+        return ps;
+    }
+}
+```
+- **템플릿 메소드 패턴의 단점**은 로직마다 새로운 클래스를 만들어야한다는 점...!
+- 또한 확장구조가 이미 클래스를 설계하는 시점에서 고정됨 -> 컴파일 시점에서 서브클래스와의 관계가 결정되어 유연성이 떨어짐.
+
+#### 전략 패턴의 적용
+- 개방폐쇄원칙을 잘 지키면서 템플릿메소드패턴 보다 유연하고 확장성이 뛰어난 것이
+- -> **오브젝트를 아예 둘로 분리하고, 클래스레벨에서는 인터페이스를 통해서만 의존**하도록 만드는 **전략패턴**
+![img](/img/img_2.png)
+- **컨텍스트** : 변하지 않는 부분
+- **전략** : 변하는 부분에 대한 인터페이스
+- 좌측에 있는 Context의 contextMethod()에서 일정한 구조를 가지고 동작하다가
+- -> 특정 확장 기능은 Strategy 인터페이스를 통해 외부의 독립된 전략 클래스에 위임.
+- deleteAll()에서 변하지 않는 부분이 이 contextMethod()가 됨
+- -> 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
