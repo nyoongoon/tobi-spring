@@ -1064,22 +1064,115 @@ public class UserDaoDeleteAll extends UserDao{
 - 좌측에 있는 Context의 contextMethod()에서 일정한 구조를 가지고 동작하다가
 - -> 특정 확장 기능은 Strategy 인터페이스를 통해 외부의 독립된 전략 클래스에 위임.
 - deleteAll()에서 변하지 않는 부분이 이 contextMethod()가 됨
-- -> 
+
+```java
+public interface StatementStrategy {
+    PreparedStatement makePreparedStatement(Connection c) throws SQLException;
+}
+```
+
+```java
+public class DeleteAllStatement implements StatementStrategy{
+    @Override
+    public PreparedStatement makePreparedStatement(Connection c) throws SQLException {
+        PreparedStatement ps = c.prepareStatement("delete from users");
+        return ps;
+    }
+}
+```
+```
+public void deleteAll() throws SQLException{
+//... 
+  try {
+            c = dataSource.getConnection();
+            StatementStrategy strategy = new DeleteAllStatement();
+            ps = strategy.makePreparedStatement(c);
+            
+            ps.executeUpdate();
+        } catch (SQLException e) {
+//...
+}
+```
+- -> 하지만 전략패턴은 필요에 따라 컨텍스트는 유지되면서 전략을 바꿔쓸 수 있느 ㄴ것인데, 
+- -> 위처럼 구체적인 전략 클래스인 DeleteAllStatement를 사용하도록 고정되어 있는 것은 이상함.
+- -> 컨텍스트가 구체적인 구현 클래스를 직접 알고 있다는건, 전략패턴도 OCP원칙도 맞지 않음
+
+#### DI 적용을 위한 클라이언트 / 컨텍스트 분리
+- 전략 패턴에 따르면 Context가 어떤 전략을 사용할 것인가는
+- -> Context를 사용하는 앞단의 Client가 결정하는 게 일반적.
+- Client가 구체적인 전략의 하나를 선택하고 오브젝트로 만들어서 Context에 전달
+- -> Context는 전달받은 그 Strategy를 구현 클래스의 오브젝트에 사용.
+![img](/img/img_3.png)
+- -> 중요한 것은 클라이언트 코드인 StatementStrategy를 만드는 부분을 독립 시켜야함 !
+```
+StatementStrategy strategy = new DeleteAllStatement();
+```
+```java
+public class ex{
+    public void jdbcContextWithStatementStrategy(StatementStrategy stmt) throws SQLException {
+        Connection c = null;
+        PreparedStatement ps = null;
+
+        try{
+            c = dataSource.getConnection();
+            ps = stmt.makePreparedStatement(c);
+            ps.executeUpdate();
+        }catch (SQLException e){
+            throw e;
+        }finally {
+            if(ps != null) {try {ps.close();} catch (SQLException e){}}
+            if(c != null) {try {c.close();} catch (SQLException e){}}
+        }
+    }
+}
+```
+- -> 클라이언트로부터 StatementStrategy 타입의 전략 오브젝트를 제공받고
+- -> JDBC try/catch/finally 구조로 만들어진 컨텍스트 내에서 작업을 수행함.
+- -> 제공받은 전략 오브젝트는 PreparedStatement 생성이 필요한 시점에 호출해서 사용
+##### 메소드가 전략 패턴의 클라이언트가 됨 !
+- 컨텍스트를 별도의 메소드로 분리했으므로 deleteAll() 메소드가 클라이언트가 됨
+- delteAll()은 전략 오브젝트를 만들고 컨텍스트를 호출하는 책임을 지고 있음. 
+```java
+class ex{
+    public void deleteAll() throws SQLException { // 전략패턴의 클라이언트가 된 메소드
+        StatementStrategy st = new DeleteAllStatement(); //선정한 전략 클래스의 오브젝트 생성
+        jdbcContextWithStatementStrategy(st); //컨텍스트 호출, 전략 오브젝트 전달. 
+    }
+} 
+```
+- -> 클라이언트가 사용할 전략을 정해서 컨텍스트로 전달하는 면에서 **DI 구조**
+- -> 마이크로 DI(=수동DI) -> 전랙패턴 구조에 따라 클라이언트가 오브젝트 팩토리의 책임을 지고 있음.
 
 
+## JDBC 전략 패턴의 최적화
+### 전략 클래스의 추가 정보
+- 매개변수가 필요한 전략인 경우
+```java
+public class AddStatement implements StatementStrategy {
+    User user;
 
+    public AddStatement(User user) {
+        this.user = user;
+    }
 
+    @Override
+    public PreparedStatement makePreparedStatement(Connection c) throws SQLException {
+        PreparedStatement ps =
+                c.prepareStatement("insert into users(id, name, password) values(?,?,?)");
+        ps.setString(1, user.getId());
+        ps.setString(2, user.getName());
+        ps.setString(3, user.getPassword());
 
-
-
-
-
-
-
-
-
-
-
+        return ps;
+    }
+}
+```
+### 전략과 클라이언트의 동거
+- 현재 구조의 문제점
+- DAO 메소드마다 새로운 StatementStrategy 구현 클래스르 만들어야함 -> 클래스 너무 많아짐.
+- 전략에 전달해야할 부가적인 정보가 있을 경우, 오브젝트를 전달받는 생성자와 이를 저장해둘 인스턴스 변수를 번거롭게 만들어야함.
+- -> 문제 해결 -> 로컬 클래스
+#### 로컬 클래스
 
 
 

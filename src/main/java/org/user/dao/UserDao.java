@@ -5,7 +5,7 @@ import org.user.domain.User;
 import javax.sql.DataSource;
 import java.sql.*;
 
-public abstract class UserDao {
+public class UserDao {
     private DataSource dataSource;
 
     public void setDataSource(DataSource dataSource) {
@@ -13,18 +13,8 @@ public abstract class UserDao {
     }
 
     public void add(User user) throws SQLException {
-        Connection c = dataSource.getConnection();
-        PreparedStatement ps = c.prepareStatement(
-                "insert into users(id, name, password) value(?,?,?)");
-        ps.setString(1, user.getId());
-        ps.setString(2, user.getName());
-        ps.setString(3, user.getPassword());
-
-        ps.executeUpdate();
-
-        ps.close();
-        c.close();
-        ;
+        StatementStrategy st = new AddStatement(user);
+        jdbcContextWithStatementStrategy(st);
     }
 
     public User get(String id) throws SQLException {
@@ -53,67 +43,60 @@ public abstract class UserDao {
         return user;
     }
 
-    public void deleteAll() throws SQLException {
-        Connection c = null;
-        PreparedStatement ps = null;
-        try {
-            c = dataSource.getConnection();
-//            ps = c.prepareStatement("delete from users");
-            ps = makeStatemet(c); // 변하는 부분을 메소드로 추출하고 변하지 않는 부분에서 호출하도록 수정
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            throw e;
-        } finally {
-            if (ps != null) {
-                try {
-                    ps.close();
-                } catch (SQLException e) {
-                }
-            }
-            if(c != null){
-                try{
-                    c.close();
-                }catch (SQLException e){
-                }
-            }
-        }
+    public void deleteAll() throws SQLException { // 전략패턴의 클라이언트가 된 메소드
+      StatementStrategy st = new DeleteAllStatement(); //선정한 전략 클래스의 오브젝트 생성
+      jdbcContextWithStatementStrategy(st); //컨텍스트 호출, 전략 오브젝트 전달.
     }
-
-   abstract protected PreparedStatement makeStatemet(Connection c) throws SQLException;
 
     public int getCount() throws SQLException {
         Connection c = null;
         PreparedStatement ps = null;
         ResultSet rs = null;
 
-        try{
+        try {
             c = dataSource.getConnection();
             ps = c.prepareStatement("select count(*) from users");
 
             rs = ps.executeQuery();
             rs.next();
             return rs.getInt(1);
+        } catch (SQLException e) {
+            throw e;
+        } finally {
+            if (rs != null) {
+                try {
+                    rs.close();
+                } catch (SQLException e) {
+                }
+            }
+            if (ps != null) {
+                try {
+                    ps.close();
+                } catch (SQLException e) {
+                }
+            }
+            if (c != null) {
+                try {
+                    c.close();
+                } catch (SQLException e) {
+                }
+            }
+        }
+    }
+
+    public void jdbcContextWithStatementStrategy(StatementStrategy stmt) throws SQLException {
+        Connection c = null;
+        PreparedStatement ps = null;
+
+        try{
+            c = dataSource.getConnection();
+            ps = stmt.makePreparedStatement(c);
+            ps.executeUpdate();
         }catch (SQLException e){
             throw e;
         }finally {
-            if(rs != null){
-                try{
-                    rs.close();
-                }catch (SQLException e){
-                }
-            }
-            if( ps != null){
-                try{
-                    ps.close();
-                }catch (SQLException e){
-                }
-            }
-            if(c != null){
-                try{
-                    c.close();
-                }catch (SQLException e){
-                }
-            }
+            if(ps != null) {try {ps.close();} catch (SQLException e){}}
+            if(c != null) {try {c.close();} catch (SQLException e){}}
         }
     }
 }
