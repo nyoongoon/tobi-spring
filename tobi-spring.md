@@ -1172,7 +1172,167 @@ public class AddStatement implements StatementStrategy {
 - DAO 메소드마다 새로운 StatementStrategy 구현 클래스르 만들어야함 -> 클래스 너무 많아짐.
 - 전략에 전달해야할 부가적인 정보가 있을 경우, 오브젝트를 전달받는 생성자와 이를 저장해둘 인스턴스 변수를 번거롭게 만들어야함.
 - -> 문제 해결 -> 로컬 클래스
-#### 로컬 클래스
+
+- cf) 중첩 클래스의 종류
+- 중첩 클래스 : 다른 클래스 내부에 정의되는 클래스를 중첩 클래스(nested class)라고 함
+- 중첩 클래스 -> "스태틱 클래스"와 "내부 클래스"로 구분됨
+- 스태틱 클래스 : 독립적으로 오브젝트로 만들어질 수 있음
+- 내부클래스 : 자신이 정의된 클래스의 오브젝트 안에서만 만들어질 수 있음.
+- 내부클래스 -> 범위에 따라 세가지로 구분됨 (멤버 내부 클래스, 로컬 클래스, 익명 내부 클래스)
+- 멤버 내부 클래스 : 멤버 필드처럼 오브젝트 레벨에 정의 됨
+- 로컬 클래스 : 메소드 레벨에 저으이됨
+- 익명 내부 클래스 : 이름을 갖지 않으며 범위는 선언된 위치에 따라 다름.
+
+#### 로컬 클래스  (메소드 안에 선언된 내부 클래스)
+- 클래스파일이 많아지는 문제 해결 방법 1
+- -> StatementStrategy 전략 클래스를 매번 독립된 파일로 만들지 말고 UserDao 클래스 안에, 메소드 내부의 내부 클래스로 정의
+
+```java
+class ex {
+    public void add(User user) throws SQLException {
+        public class AddStatement implements StatementStrategy {
+            User user;
+
+            public AddStatement(User user) {
+                this.user = user;
+            }
+
+            @Override
+            public PreparedStatement makePreparedStatement(Connection c) throws SQLException {
+                PreparedStatement ps =
+                        c.prepareStatement("insert into users(id, name, password) values(?,?,?)");
+                ps.setString(1, user.getId());
+                ps.setString(2, user.getName());
+                ps.setString(3, user.getPassword());
+
+                return ps;
+            }
+        }
+        StatmentStrategy st = new AddStatement(user);
+        jbdcContextWithStatementStrategy(st);
+    }
+}
+```
+- -> 로컬 클래스 사용하면, 자신이 정의된 메소드의 로컬 변수에 직접 접근 가능 !
+- **메소드 파리미터도 일종의 로컬 변수 이므로** add() 메소드의 user변수를 AddStatement에서 직접 사용할 수 있음
+- -> 다만 내부클래스에서 외부의 변수를 사용할 때는 외부 변수 반드시 final로 선언해야함 !
+
+```java
+class ex {
+    public void add(final User user) throws SQLException { //로컬 변수 user
+        class AddStatement implements StatementStrategy {
+            public PreparedStatement makePreparedStatement(Connection c) throws SQLException {
+                PreparedStatement ps =
+                        c.prepareStatement("insert into users(id, name, password) values(?,?,?)");
+                ps.setString(1, user.getId());
+                ps.setString(2, user.getName());
+                ps.setString(3, user.getPassword()); //로컬 클래스에서 외부 메소드 로컬 변수에 직접 접근 가능 !!! (final일 경우)
+                return ps;
+            }
+        }
+        StatementStrategy st = new AddStatement();
+        jdbcContextWithStatementStrategy(st);
+    }
+}
+```
+
+#### 익명 내부 클래스 
+- AddStatement 클래스는 add() 메소드에서만 사용할 용도로 만들어졌음 -> 간결하게 클래스 이름까지 제거
+- cf) 익명 내부 클래스 : 클래스 선언과 오브젝트 생성이 결합된 형태. 상속또는 구현할 대상을 생성자 대신 사용해서 선언. 재사용필요 없을 경우, 상속 또는 구현할 타입으로만 사용할 경우 유용.
+- > 선언가 동시에 오브젝트로 생성, 이름이 없기 때문에 자신의 클래스 타입 가질 수 없음. -> 상속 또는 구현 대상 타입의 변수에만 저장 가능
+```
+new 인터페이스 이름() { 클래스 본문 };
+```
+- AddStatement를 익명 내부 클래스로 전환
+
+```java
+class ex {
+    public void add(final User user) throws SQLException { //로컬 변수 user
+        StatementStrategy st = new StatementStrategy() { //익명 내부 클래스 !!! -> 구현하는 인터페이스를 생성자처럼 이용해서 오브젝트 만듬
+            @Override
+            public PreparedStatement makePreparedStatement(Connection c) throws SQLException {
+                PreparedStatement ps =
+                        c.prepareStatement("insert into users(id, name, password) values(?,?,?)");
+                ps.setString(1, user.getId());
+                ps.setString(2, user.getName());
+                ps.setString(3, user.getPassword()); //로컬 클래스에서 외부 메소드 로컬 변수에 직접 접근 가능 !!! (final일 경우)
+                return ps;
+            }
+        };
+        StatementStrategy st = new AddStatement();
+        jdbcContextWithStatementStrategy(st);
+    } 
+}
+```
+- -> 만들어진 익명 내부 클래스의 오브젝트는 딱 한 번만 사용되니, 변수에 담아두지 않고 파라미터에서 바로 생성하는 것이 낫다.
+```java
+class ex {
+    public void add(final User user) throws SQLException { //로컬 변수 user
+        jdbcContextWithStatementStrategy(
+                new StatementStrategy() { //익명 내부 클래스 !!! -> 구현하는 인터페이스를 생성자처럼 이용해서 오브젝트 만듬
+            @Override
+            public PreparedStatement makePreparedStatement(Connection c) throws SQLException {
+                PreparedStatement ps =
+                        c.prepareStatement("insert into users(id, name, password) values(?,?,?)");
+                ps.setString(1, user.getId());
+                ps.setString(2, user.getName());
+                ps.setString(3, user.getPassword()); //로컬 클래스에서 외부 메소드 로컬 변수에 직접 접근 가능 !!! (final일 경우)
+                return ps;
+            }
+        });
+    } 
+}
+```
+
+
+## 3.4 컨텍스트와 DI
+### JdbcContext의 분리
+- jdbc의 일반적인 작업 흐름을 담고 있는 jdbcContextWithStatementStrategy()는 다른 DAO에서도 사용 가능
+- -> UserDao 클래스 밖을 독립시켜서 모든 DAO가 사용할 수 있게 해보기
+#### 클래스 분리
+- 분리해서 만들 클래스 이름은 JbdcContext -> 전략 패턴에서 컨텍스트에 해당되는 부분 이므로
+```java
+public class JdbcContext {
+    private DataSource dataSource;
+
+    public void setDataSource(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    public void workWithStatementStrategy(StatementStrategy stmt) throws SQLException{
+        Connection c = null;
+        PreparedStatement ps = null;
+        
+        try{
+            c = this.dataSource.getConnection();
+            ps = stmt.makePreparedStatement(c);
+            ps.executeUpdate();
+        }catch (SQLException e){
+            throw e;
+        }finally {
+            if(ps != null) {try { ps.close();}catch (SQLException e){}}
+            if(c != null) {try { c.close();}catch (SQLException e){}}
+        }
+    }
+}
+```
+
+#### 빈 의존관계 변경
+- UserDao는 이제 JdbcContext에 의존하고 있음
+- JdbcContext는 인터페이스인 DataSource와 달리 구체 클래스
+- 스프링 DI는 기본적으로 인터페이스를 사이에 두고 의존 클래스를 바꿔서 사용 하는 것이지만,,
+- -> 이 경우는 jdbcContext는 그 자체로 독립적인 JDBC 컨텍스트를 제공해주는 서비스 오브젝트로서 의미가 있을 뿐이고, 구현 방법이 바뀔 가능성은 없음
+- -> 인터페이스를 사이에 두지 않고 DI를 적용하는 특별한 구조.
+![img](/img/img_4.png)
+- 
+
+
+
+
+
+
+
+
 
 
 
