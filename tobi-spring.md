@@ -1289,8 +1289,9 @@ class ex {
 ### JdbcContext의 분리
 - jdbc의 일반적인 작업 흐름을 담고 있는 jdbcContextWithStatementStrategy()는 다른 DAO에서도 사용 가능
 - -> UserDao 클래스 밖을 독립시켜서 모든 DAO가 사용할 수 있게 해보기
-#### 클래스 분리
+#### 클래스 분리 -> 템플릿/콜백 패턴
 - 분리해서 만들 클래스 이름은 JbdcContext -> 전략 패턴에서 컨텍스트에 해당되는 부분 이므로
+- -> 익명내부클래스를 사용한 전략 패턴 ==> **템플릿/콜백 패턴**
 ```java
 public class JdbcContext {
     private DataSource dataSource;
@@ -1316,7 +1317,21 @@ public class JdbcContext {
     }
 }
 ```
-
+```java
+// 템플릿/콜백 패턴
+class ex{
+    public void deleteAll() throws SQLException { // 전략패턴의 클라이언트가 된 메소드
+        jdbcContext.workWithStatementStrategy( // 컨텍스트에 전략 전달...
+                new StatementStrategy() { //익명 내부 클래스 !!! -> 구현하는 인터페이스를 생성자처럼 이용해서 오브젝트 만듬
+                    @Override
+                    public PreparedStatement makePreparedStatement(Connection c) throws SQLException {
+                        return c.prepareStatement("delete from users");
+                    }
+                }
+        );
+    }
+}
+```
 #### 빈 의존관계 변경
 - UserDao는 이제 JdbcContext에 의존하고 있음
 - JdbcContext는 인터페이스인 DataSource와 달리 구체 클래스
@@ -1324,19 +1339,74 @@ public class JdbcContext {
 - -> 이 경우는 jdbcContext는 그 자체로 독립적인 JDBC 컨텍스트를 제공해주는 서비스 오브젝트로서 의미가 있을 뿐이고, 구현 방법이 바뀔 가능성은 없음
 - -> 인터페이스를 사이에 두지 않고 DI를 적용하는 특별한 구조.
 ![img](/img/img_4.png)
-- 
 
 
+### JdbcContext의 특별한 DI
+- 인터페이스를 거치지 않고 바로 클래스를 사용하여, 런타임시 의존 오브젝트의 구현 클래스를 변경할 수 없게 되었음
+
+#### 스프링 빈으로 DI 
+- 항상 인터페이스를 사용해서 주입해야하는 것은 아님!
+- -> 스프링의 DI는 넓게 보자면 객체의 생성과 관계 설정에 대한 오브젝트에서 제거하고 외부로 위임했다는 IoC 개념을 포괄
+- -> 인터페이스를 사용하지 않더라도 JdbcContext를 스프링을 이용해 UserDao 객체에서 사용하게 주입했다는 건 DI의 기본을 따르고 있다고 볼 수 있는 것!
+- 인터페이스 사용하지 않았더라도 **DI 구조 해야하는 이유**
+- -> JdbcContext 싱글톤으로 사용해야하기 때문 -> dataSource라는 인스턴스 변수가 있지만, 읽기 전용이므로 싱글턴에 문제 없음
+- -> JdbcContext가 DI를 통해 다른 빈에 의존하고 있기 때문 -> DI 받기 위해선 양쪽 스프링 빈이어야함.
+##### 인터페이스 사용 여부?
+- -> 인터페이스가 없다는 것은 UserDao와 JdbcContext가 매우 긴밀한 관계를 가지고 강하게 결합되어 있기 때문
+- -> 다른 db 접근 방식을 사용해야한다면 클래스 자체가 사라져야하고
+- -> 테스트에서도 다른 구현으로 대체해서 사용할 이유가 없음.
+- -> 이런경우 강한 결합 관계를 유지하면서 싱글톤과, DI를 위한 스프링 빈으로 등록하여 DI되도록 함.
+
+### 코드를 이용하는 수동 DI -> 이렇게 하는 것에 대한 장점은..? -> 긴밀한 클래스끼리 굳 빈으로 분리하지 않고 싶을 떄...
+- -> 빈 등록하지 않고 DAO마다 하나의 JdbcContext 오브젝트를 갖게 할 수도 있음.
+- -> JdbcContext는 내부 상태 정보가 없기 때문에 많이 만들어져도 메모리에 부담 거의 없음. 
+- -> 자주 만들어졌다가 제거되는 것도 아니기에 GC 부담도 없음
+- 빈이 아니라면 JdbcContext의 제어권은 UserDao가 갖는 것이 적당함. 
+- -> 그렇다면 DI 사용 두번쨰 이유인, **다른 빈에 대한 의존은 어떻게 처리 ???**
+- -> JdbcContext의 제어권을 갖고 생성과 관리를 담당하는 UserDao에세 DI를 맡기기...
+![img](/img/img_5.png)
+
+```java
+class ex{
+    public void setDataSource(DataSource dataSource){
+        this.jdbcContext = new JdbcContext();
+        this.jdbcContext.setDataSource(dataSource);
+        this.dataSource = dataSource; // 아직 JdbcContext를 적용하지 않은 메소드를 위해 저장해둠
+    }
+}
+```
+- -> 이렇게 한 오브젝트의 수정자 메소드에서 다른 오브젝트를 초기화 하고 코드를 이용해 DI 하는 것은 스프링에서 종종 사용되는 기법.
+
+### 정리 - 결합이 강한 클래스끼리 경우의 DI 방법 2가지.
+- 인터페이스 사용하지 않고 다른 클래스와 밀접한 클래스 DI 방법 두가지
+- -> 1. 인터페이스 사이에 끼지 않고도 빈으로 직접 DI -> DI 원칙에 부합하지 않게 구체 클래스와의 관계가 설정에 직접 노출 단점
+- -> 2. 빈으로 두지 않고 그냥 생성자 수동 DI하여 로직 추가 -> 싱글톤X, 수동 DI 추가 코드 작성
 
 
+# 3.5 템플릿과 콜백
+- 지금까지 UserDao와 StatmentStrategy, JdbcContext를 이용해 만든 코드는 일종의 전략 패턴이 적용된 것.
+- -> "전략 패턴의 기본 구조에 익명 내부 클래스"를 활용했음. 
+- --> 이런 패턴을 스프링에서는 **템플릿/콜백 패턴**이라고 부름
+- -> 전략 패턴의 컨텍스트를 **템플릿**이라고 부르고
+- -> 익명내부 클래스로 만들어지는 오브젝트(전략)을 **콜백**이라고 부름.
 
+- cf)
+- 템플릿 : 어떤 목적을 위해 미리 만들어둔 모양이 있는 틀
+- -> 템플릿 메소드 패턴은 고정된 틀의 로직을 가지고 템플릿 메소드를 슈퍼클래스에 두고, 바뀌는 부분을 서브클래스의 메소드에 두는 구조.
+- 콜백 : 다른 오브젝트로 전달되어서 **실행될 메소드를 보유한 오브젝트**. 
+- -> 파라미터로 전달되지만 값을 참조하기 위한 것이 아니라, 특정 로직을 담은 메소드를 실행시키기 위해 사용. 
+- -> **자바에선 메소드 자체를 파라미터로 전달할 방법이 없기 떄문**에 사용할 메소드를 갖고 있는 오브젝트를 전달 -> 펑서녈 오브젝트라고도 함
 
-
-
-
-
-
-
-
+## 템플릿/콜백의 동작원리
+### 템플릿/콜백의 특징
+- 여러개의 메소드를 가진 인터페이스를 사용하는 일반적인 전략패턴과 달리, 템플릿/콜백 패턴의 콜백은 보통 단일 메소드 인터페이스를 사용.
+- -> 템플릿(컨텍스트)의 작업 흐름 중 특정 기능을 위해 한 번 호출되는 경우가 일반적이기 떄문 
+- -> 하나의 템플릿에 여러 전략을 사용해야한다면 하나 이상의 콜백 오브젝트를 사용할 수도 있음
+- -> 콜백은 일반적으로**하나의 메소드를 가진 인터페이스를 구현한 익명 내부 클래스**
+```java
+public interface StatementStrategy { //콜백 패턴을 위한 인터페이스 -> 보통 단일 메소드를 가진 인터페이스
+    PreparedStatement makePreparedStatement(Connection c) throws SQLException;
+}
+```
 
 
