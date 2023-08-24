@@ -62,14 +62,7 @@ public class UserDao {
     }
 
     public void deleteAll() throws SQLException { // 전략패턴의 클라이언트가 된 메소드
-        jdbcContext.workWithStatementStrategy(
-                new StatementStrategy() { //익명 내부 클래스 !!! -> 구현하는 인터페이스를 생성자처럼 이용해서 오브젝트 만듬
-                    @Override
-                    public PreparedStatement makePreparedStatement(Connection c) throws SQLException {
-                        return c.prepareStatement("delete from users");
-                    }
-                }
-        );
+       jdbcContext.executeSql("delete from users");
     }
 
     public int getCount() throws SQLException {

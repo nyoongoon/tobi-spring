@@ -1408,5 +1408,73 @@ public interface StatementStrategy { //콜백 패턴을 위한 인터페이스 -
     PreparedStatement makePreparedStatement(Connection c) throws SQLException;
 }
 ```
+#### 콜백 인터페이스 메소드의 파라미터
+- 콜백 인터페이스 메소드에는 보통 파라미터가 있음. (위의 Connection c)
+- 이 파라미터는 템플릿의 작업 흐름 중에 만들어지는 컨텍스트의 정보를 전달 받을 때 사용됨.
+- 일반적인 템플릿/콜백 패턴의 일반적인 흐름
+![img](/img/img_6.png)
+- -> 클라이언트가 템플릿 메소드를 호출하면서 콜백 오브젝트를 전달하는 것은 메소드 레벨에서 일어나는 DI
+- -> 클라이언트와 콜백이 강하게 결합된 DI
+
+## 편리한 콜백의 재활용
+- 템플릿/콜백 방식의 아쉬운 점 -> DAO 메소드에서 매번 익명 내부 클래스를 사용하기 때문에 
+- -> 상대적으로 코드를 작성하고 읽기가 조금 불편하다는 점
+### 콜백의 분리와 재활용
+- 복합한 익명 내부 클래스의 사용을 최소화하는 방법
+- 분리를 통해 재사용 가능한 코드를 찾아낼 수 있다면 익명 내부 클래스 사용 코드를 간결하게 만들 수 있음.
+```java
+class ex {
+    public void deleteAll() throws SQLException { // 전략패턴의 클라이언트가 된 메소드
+        executeSql("delete from users");
+    }
+    private void executeSql(final String query) throws SQLException {
+        this.jdbcContext.workWithStatementStrategy(
+                new StatementStrategy() {
+                    @Override
+                    public PreparedStatement makePreparedStatement(Connection c) throws SQLException {
+                        return c.prepareStatement(query);
+                    }
+                }
+        );
+    }
+}
+```
+- -> 바뀌는 부분인 SQL 문장만 파라미터로 받아서 사용 -> 파라미터를 final로 선언해서 익명내부클래스인 콜백 안에서 사용하도록 하는 것 주의
+
+### 콜백과 템플릿의 결합
+- 재사용 가능한 콜백을 담고 있는 메소드라면 DAO가 공유할 수 있는 템플릿 클래스 안으로 옮기기
+- -> 엄밀히 말하면 템플릿은 JdbcContext 클래스가 아니라, workWithStatementStrategy() 메소드이므로 JdbcContext로 exeuteSql() 옮겨도 문제 없음
+![img](/img/img_7.png)
 
 
+### 테스트와 try/catch/finally
+```java
+public class Calculator {
+    public Integer calcSum(String filePath) throws IOException {
+        BufferedReader br = null;
+
+        try {
+            br = new BufferedReader(new FileReader(filePath)); // 한 줄씩 읽기 편하게 BufferedReader
+            Integer sum = 0;
+            String line = null;
+            while ((line = br.readLine()) != null) {
+                sum += Integer.valueOf(line);
+            }
+            return sum;
+        } catch (IOException e) {
+            System.out.println(e.getMessage());
+            throw  e;
+        } finally {
+            if(br != null){ // BufferedReader 오브젝트가 생성되기 전에 예외가 발생할 수도 있으므로 반드시 null 체크
+                try{ br.close();}
+                catch (IOException e){
+                    System.out.println(e.getMessage());
+                }
+            }
+        }
+    }
+}
+```
+
+### 중복의 제거와 템플릿/콜백 설계
+- 템플릿/콜백 설계 직접 구현 해보기...
