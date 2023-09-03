@@ -6,25 +6,38 @@ import java.io.IOException;
 
 public class Calculator {
     public Integer calcSum(String filePath) throws IOException {
-    LineCallback sumCallback = new LineCallback() {
-        @Override
-        public Integer doSomethingWithLine(String line, Integer value) {
-            return value + Integer.valueOf(line);
-        }
-    };
+        LineCallback sumCallback = new LineCallback<Integer>() {
+            @Override
+            public Integer doSomethingWithLine(String line, Integer value) {
+                return value + Integer.valueOf(line);
+            }
+        };
         return lineReadTemplate(filePath, sumCallback, 0);
     }
 
     public Integer calMultiply(String filPath) throws IOException {
-       LineCallback multiplyCallback = new LineCallback() {
-           @Override
-           public Integer doSomethingWithLine(String line, Integer value) {
-               return value * Integer.valueOf(line);
-           }
-       };
+        LineCallback multiplyCallback = new LineCallback<Integer>() {
+            @Override
+            public Integer doSomethingWithLine(String line, Integer value) {
+                return value * Integer.valueOf(line);
+            }
+        };
 
         return lineReadTemplate(filPath, multiplyCallback, 1);
     }
+
+    public String concatenate(String filepath) throws IOException {
+        LineCallback<String> concatenateCallback =
+                new LineCallback<String>() {
+                    @Override
+                    public String doSomethingWithLine(String line, String value) {
+                        return value + line;
+                    }
+                };
+        // 템플릿 메소드 lineReadTemplate의 T는 모두 스트링이 된다.
+        return lineReadTemplate(filepath, concatenateCallback, "");
+    }
+
 
     public Integer fileReadTemplate(String filePath, BufferedReaderCallback callback) throws IOException {
         BufferedReader br = null;
@@ -46,11 +59,11 @@ public class Calculator {
         }
     }
 
-    public Integer lineReadTemplate(String filePath, LineCallback callback, int initVal) throws IOException {
+    public <T> T lineReadTemplate(String filePath, LineCallback<T> callback, T initVal) throws IOException {
         BufferedReader br = null;
         try {
             br = new BufferedReader(new FileReader(filePath));
-            Integer res = initVal;
+            T res = initVal;
             String line = null;
             while ((line = br.readLine()) != null) {
                 res = callback.doSomethingWithLine(line, res);

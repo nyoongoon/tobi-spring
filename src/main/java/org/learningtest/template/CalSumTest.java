@@ -14,20 +14,25 @@ public class CalSumTest {
     String numFilePath;
 
     @Before
-    public void setUp(){
+    public void setUp() {
         this.calculator = new Calculator();
         this.numFilePath = getClass().getResource("numbers.txt").getPath();
     }
 
     @Test
-    public void sumOfNumbers() throws IOException{
+    public void sumOfNumbers() throws IOException {
 
         assertThat(calculator.calcSum(this.numFilePath), is(10));
     }
 
     @Test
-    public void multiplyOfNumbers() throws IOException{
+    public void multiplyOfNumbers() throws IOException {
 
         assertThat(calculator.calMultiply(this.numFilePath), is(10));
+    }
+
+    @Test
+    public void concatenateStrings() throws IOException {
+        assertThat(calculator.concatenate(this.numFilePath), is("1234"));
     }
 }

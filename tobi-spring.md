@@ -1907,3 +1907,73 @@ public interface LineCallback<T> {
     T doSomethingWithLine(String line, T value);
 }
 ```
+- 템플릿인 lineReadTemplate() 메소드도 타입 파라미터를 사용해 제네릭 메소드로 만들어줌
+
+```java
+class ex{
+  public <T> T lineReadTemplate(String filePath, LineCallback<T> callback, T initVal) throws IOException {
+    BufferedReader br = null;
+    try {
+      br = new BufferedReader(new FileReader(filePath));
+      T res = initVal;
+      String line = null;
+      while ((line = br.readLine()) != null) {
+        res = callback.doSomethingWithLine(line, res);
+      }
+      return res;
+    } catch (IOException e) {
+      System.out.println(e.getMessage());
+      throw e;
+    } finally {
+      if (br != null) {
+        try {
+          br.close();
+        } catch (IOException e) {
+          System.out.println();
+        }
+      }
+    }
+  }
+}
+```
+- -> 콜백의 타입 파라미터와 초기값인 initVal타입, 템플릿 결과 값 타입 동일하게 선언해줘야함.
+```java
+class ex{
+  public String concatenate(String filepath) throws IOException {
+    LineCallback<String> concatenateCallback =
+            new LineCallback<String>() {
+              @Override
+              public String doSomethingWithLine(String line, String value) {
+                return value + line;
+              }
+            };
+    // 템플릿 메소드 lineReadTemplate의 T는 모두 스트링이 된다.
+    return lineReadTemplate(filepath, concatenateCallback, "");
+  }
+
+}
+```
+
+
+## 스프링의 JdbcTemplate
+- 스프링이 제공하는 템플릿/콜백 기술 살펴보기
+- JDBC코드용 기본 템플릿은 **JdbcTemplate**
+```java
+public class UserDao {
+//  private JdbcContext jdbcContext;
+  public JdbcTemplate jdbcTemplate;
+
+  public void setDataSource(DataSource dataSource) {
+//        this.jdbcContext = new JdbcContext();
+//        this.jdbcContext.setDataSource(dataSource);
+    this.jdbcTemplate = new JdbcTemplate(dataSource);
+  }
+  //...
+}
+```
+
+### update()
+- deleteAll()에 적용했던 콜백은 StatementStrategy 인터페이스의 makePreparedStatement() 메소드
+- 이에 대응되는 JdbcTemplate의 콜백은 PreparedStatementCreator 인터페이스의 createPreparedStatement() 메소드
+- -> 템플릿으로부터 Conntection을 받아서 PreparedStatement를 만들어 준다는 면에서 구조 동일
+- -> PreparedStatementCreator 타입의 콜백을 받아서 사용하는 JdbcTemplate의 템플릿 메소드는 update()
