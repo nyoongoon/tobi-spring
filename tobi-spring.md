@@ -1977,3 +1977,59 @@ public class UserDao {
 - 이에 대응되는 JdbcTemplate의 콜백은 PreparedStatementCreator 인터페이스의 createPreparedStatement() 메소드
 - -> 템플릿으로부터 Conntection을 받아서 PreparedStatement를 만들어 준다는 면에서 구조 동일
 - -> PreparedStatementCreator 타입의 콜백을 받아서 사용하는 JdbcTemplate의 템플릿 메소드는 update()
+
+### queryForInt()
+- SQL 쿼리를 실행하고 ResultSet을 통해 결과를 가져오는 코드에 쓸 수 있는 템플릿음
+- PreparedStatementCreator 콜백과 ResultSetExtractor 콜백을 파라미터로 받는 query() 메소드
+```java
+class ex{
+  public int getCount() {
+    return this.jdbcTemplate.query(new PreparedStatementCreator() {
+      @Override
+      public PreparedStatement createPreparedStatement(Connection con) throws SQLException {
+        return con.prepareStatement("select count(*) from users");
+      }
+    }, new ResultSetExtractor<Integer>() {
+      public Integer extractData(ResultSet rs) throws SQLException {
+        rs.next();
+        return rs.getInt(1);
+
+      }
+    });
+  }
+  
+  public int getCount(){ //queryForInt 사용
+    return this.jdbcTemplate.queryForInt("select count(*) from users");
+  }
+}
+```
+
+### queryForObject()
+- ResultSet의 결과를 User 오브젝트를 만들어 프로퍼티에 넣어주기
+- 위에서 제네릭 설정 해주었던 ResultSetExtract 콜백 대신 RowMapper 콜백을 사용.
+- -> 차이점은 ResultSetExtractor는 한 번 전달받아 알아서 추출작업을 모두 진행하고 최종 결과만 리턴
+- -> RowMapper는 ResultSet 로우 하나를 매핑하기 때문에 여러번 호출 가능. 
+
+```java
+class ex{
+  public User get(String id) {
+    return this.jdbcTemplate.queryForObject("select * from users where id = ?",
+            new Object[]{id}, // SQL에 바인딩할 파라미터 값, 가변인자 대신 배열을 사용.
+            new RowMapper<User>() {
+              @Override
+              public User mapRow(ResultSet rs, int rowNum) throws SQLException {
+                User user = new User();
+                user.setId(rs.getString("id"));
+                user.setName(rs.getString("name"));
+                user.setPassword(rs.getString("password"));
+                return user;
+              }
+            });
+  }
+}
+```
+- -> queryForOjbect()는 SQL 실행해서 받은 로우의 개수가 하나가 아니라면 예외를 던짐. 
+
+### query()
+#### 기능 정의와 테스트 작성 
+- 
