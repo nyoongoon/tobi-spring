@@ -2032,4 +2032,89 @@ class ex{
 
 ### query()
 #### 기능 정의와 테스트 작성 
-- 
+- 위의 queryForObject()는 쿼리의 결과가 로우 하나일 때 사용
+- query()는 여러 개의 로우가 결과로 나오는 일반적인 경우에 쓸 수 있음.
+- query()는 제네릭 메소드로 타입은 파라미터로 넘기는 RowMapper<T> 콜백 오브젝트에서 결정됨.
+```java
+class ex{
+  public List<User> getAll() {
+    return this.jdbcTemplate.query("select * from users order by id",
+            new RowMapper<User>() {
+              @Override
+              public User mapRow(ResultSet rs, int rowNum) throws SQLException {
+                User user = new User();
+                user.setId(rs.getString("id"));
+                user.setName(rs.getString("name"));
+                user.setPassword(rs.getString("password"));
+                return user;
+              }
+            });
+  }   
+}
+```
+- 첫 번째 파라미터에는 실행할 SQL 쿼리를 넣음
+- 바인딩할 파라미터가 있다면 두 번째 파라미터에 추가 가능
+- 마지막 파라미터는 RowMapper 콜백 -> 가져오는 로우 만큼 호출됨.
+- -> 결과가 없을 경우 크기가 0인 List<T> 오브젝트 반환
+
+### 테스트 보완 - 네거티브 테스트
+- 예외 상황에 대한 테스트 -> 예외적인 조건에 대해 먼저 테스트를 만드는 습관이 좋음
+- ex) get()이라면 Id가 없을 때는 어떻게 되는지, getAll()이라면 결과가 하나도 없는 경우에는 어떻게 되는지 ..
+- query()의 결과와 상관없이 getAll() 메소드의 예외 상황에 대한 테스트 반드시 필요.
+
+
+
+## 재사용 가능한 콜백의 분리 
+### DI를 위한 코드정리
+```java
+public class UserDao {
+  public JdbcTemplate jdbcTemplate;
+
+  public void setDataSource(DataSource dataSource) { // DI
+    this.jdbcTemplate = new JdbcTemplate(dataSource);
+  }
+  //..
+}
+```
+- -> 수정자 메소드에거 이렇게 다른 오브젝트를 생성하는 경우 종종 있음.
+
+### 중복 제거
+- RowMapper 콜백의 내용이 중복됨
+- -> 매번 RowMapper 오브젝트를 새로 만들어야할지 생각하기
+- -> RowMapper 콜백 오브젝트에는 상태 정보가 없으므로 -> 멀티스레드에서 동시에 사용해도 문제 없음
+- -> 하나만 만들어서 공유하기
+```java
+public class UserDao {
+    private RowMapper<User> userMapper = 
+            new RowMapper<User>() {
+                @Override
+                public User mapRow(ResultSet rs, int rowNum) throws SQLException {
+                    User user = new User();
+                    user.setId(rs.getString("id"));
+                    user.setName(rs.getString("name"));
+                    user.setPassword(rs.getString("password"));
+                    return user;
+                }
+            };
+    //...
+    public User get(String id) {
+      return this.jdbcTemplate.queryForObject("select * from users where id = ?",
+              new Object[]{id},
+              this.userMapper);
+    }
+    public List<User> getAll() {
+      return this.jdbcTemplate.query("select * from users order by id",
+              this.userMapper);
+    }
+}
+```
+
+### 템플릿/콜백 패턴과 UserDao
+- UserDao에는 User정보를 DB에 넣거나 가져오거나 조작하는 방법에 대한 핵심적인 로직만 담겨 있음
+- -> 응집도가 높음
+- 반면, JDBC API 사용 방식, 예외처리, 리소스 반납, DB 연결등의 책임과 관심은 JdbcTemplate에게 이씅ㅁ
+- -> 결합도 낮음
+- -> 다만, JdbcTemplate이라는 템플릿 클래스는 직접 이용한다는 면에서 특정 템플릿/콜백 구현에 강한 결합을 갖고 있음.
+- -> 더 낮은 결합도를 유지하고 싶다면 JdbcTemplate을 독립적인 빈으로 등록하고, JdbcTemplate이 구현하고 있는 JdbcOperations인터페이스를 통해 DI 받아 사용하도록 만들어도 됨
+- -> JdbcTemplate은 DAO안에서 직접 만들어 사용하는게 스프링 관례이긴 하나, 독립된 싱글톤으로 등록하고 DI 받아 인터페이스를 통해 사용 가능.
+- 스프링에서 클래스 이름이 Template으로 끝나거나 인터페이스 이름이 Callback으로 끝난다면 템프릿/콜백이 적용된 것
