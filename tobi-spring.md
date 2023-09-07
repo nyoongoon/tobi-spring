@@ -2134,3 +2134,129 @@ public class UserDao {
 
 
 # 예외 
+- 예외 처리하는 베스트 프랙티스 살펴보기
+
+## 사라진 SQLException
+- JdbcContext (커스텀 클래스)-> JdbcTemplate으로 바꾸면서 예외 처리 부분이 생략됨
+
+```java
+import java.sql.SQLException;
+
+class ex {
+  public void deleteAll() throws SQLException{
+      this.jdbcContext.executeSql("delete from users");
+  }
+  public void deleteAll() { //예외 사라짐 !
+      this.jdbcTemplate.update("delete from users");
+  }
+}
+```
+- SQLException은 JDBC API의 메소드들이 던지는 것이므로 당연히 있어야함.
+- 로그를 남기기위해 catch 했다고 해도 다시 JDBC 템플릿 메소드 밖으로 던져서 예외 상황이 발생했다는 사실을 알려야함.
+- -> JdbcTemplate 적용한 코드의 SQLException은 어디로 간 것일까..?
+
+## 초난감 예외처리
+- 잘못된 예외처리 코드 예시
+### 예외 블랙홀
+```
+try{
+//...    
+}catch(SQLException e){ // 예외를 잡고 아무 처리 안하고 있음 ..!
+}
+```
+- -> 원치않는 예외가 발생하는 것보다 훨씬 더 나쁜 일..
+```
+}catch(SQLException e){
+    System.out.println(e);
+}
+```
+```
+}catch(SQLException e){
+    e.printStackTrace();
+}
+```
+- -> 위의 코드도 문제가 있음
+- -> 예외는 반드시 처리가 되어야함. 메시지 출력은 예외를 처리한 것이 아님.
+- **예외처리 핵심 원칙** : 모든 예외는 적절하게 복구되든지 아니면 작업을 중단시키고 운영자 또는 개발자에게 분명하게 통보돼야 함.
+- 예외릘 잡아서 뭔가 조치를 취할 방법이 없다면 잡지 말아야함.
+- -> 메소드에 throws SQLException을 선언해서 메소드 밖으로 던지고 자신을 호출한 코드에 예외처리 책임을 전가
+
+### 무의미하고 무책임한 throws
+- 아래와 같이 메소드 선언에 throws Exception을 기계적으로 붙이는 것도 매우 좋지 않음
+```java
+class ex {
+  public void method1() throws Exception {
+    method2();
+  }
+
+  public void method2() throws Exception {
+    method3();
+  }
+
+  public void method3() throws Exception {
+    //..
+  }
+}
+```
+- 무책임하게 throws Exception을 사용하는 메소드를 사용하는 메소드도 throws Exception을 따라 붙일 수 밖에 없게 됨.. 
+
+## 예외의 종류와 특징
+- 자바에서 throw를 통해 발생시킬 수 있는 예외는 크게 세 가지
+- 1 **Error**
+- 2 **Exception과 체크 예외**
+- 3 **RuntimeException과 언체크/런타임 예외**
+
+### Error (에러)
+- java.lang.Error 클래스의 서브 클래스들. 
+- **에러는 시스템에 뭔가 비정상적인 상황이 발생**했을 경우세 사용됨
+- **주로 자바 VM에서 발생시키는 것**이고 애플리케이션 코드에서 잡으려고 하면 안됨
+- -> OutOfMemoryError나 ThreadDeath 같은 에러는 catch 블록으로 잡아봤자 아무런 대응 방법이 없기 때문
+- -> 따라서 시스템 레벨에서 특별한 작업을 하는 게 아니라면 애플리케이션에서는 이런 에러에 대한 처리는 신경 쓰지 않아도 됨 !
+
+### Exception과 체크 예외 (일반적으로 예외는 체크 예외 - RuntimException상속x)
+- 개발자들이 만든 애플리케이션 코드의 작업 중에 예외상황이 발생했을 경우에 사용됨. 
+- **Exception 클래스는 다시 체크 예외와 언체크 예외로 구분**됨
+- **체크예외**는 Exception 클래스의 서브클래스이면서 RuntimeException 클래스를 상속하지 않은 것
+- **언체크예외**는 RuntimeException을 상속한 클래스들임
+- RuntimeException은 Exception의 서브 클래스이긴 하지만, 자바는 RuntimeException과 그 서브클래스는 특별하게 다룸
+![](img/img_8.png)
+- **일반적으로 예외**라고하면 RuntimeException을 상속하지 않은 **체크 예외라고 생각**해도 됨
+- 체크 예외가 발생할 수 있는 메소드를 사용할 경우 반드시 예외를 처리하는 코드를 함께 작성해야함 !
+- cf)자바언어와 JDK초기 설계자들은 체크예외를 발생가능한 예외에 모두 적용하려고 했던 것 같음
+- -> 그래서 IOException이나 SQLException을 비롯해서 예외적인 상황에서 던져질 가능성이 있는 것들은 대부분 체크 예외로 만들어져있음.
+- 최근 자바 표준 스펙 API들은 예상가능한 예외상황을 다루는 예외를 체크 예외로 만들지 않는 경향이 있기도 함
+- 
+### RuntimeException과 언체크/런타임 예뢰
+- java.lang.RuntimeException 클래스를 상속한 예외들은 명시적인 예외처리를 강제하지 않기 때문에 언체크 예외라고 불림
+- 런타임 예외라고도 함 
+- 에러와 마찬가지로 catch문으로 잡거나 throws로 선언하지 않아도 됨 -> 명시적으로 잡거나 선언해줘도 상관없음
+- 런타임 예외는 주로 프로그램 오류가 있을 때 발생하도록 의도된 것
+- NullPointerException
+- IllegalArgumentException 등
+- -> 이런 예외는 코드에서 미리 조건을 체크하도록 주의깊게 만든다면 피할 수 있음.
+- -> 피할 수 있지만, 개발자가 부주의해서 발생할 수 있는 경우에 발생하도록 만든 것이 런타임 예외
+- -> 런타임 예외는 예상하지 못했던 예외 상황에서 발생하는게 아니기 때문에 굳이 catch나 throws를 사용하지 않아도 되는 것. 
+
+## 예외 처리 방법 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
