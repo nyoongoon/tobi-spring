@@ -1874,218 +1874,238 @@ public class Calculator {
 ```java
 public class Calculator {
     // 클라이언트에서 콜백 오브젝트 생성.
-  public Integer calcSum(String filePath) throws IOException {
-    LineCallback sumCallback = new LineCallback() {
-      @Override
-      public Integer doSomethingWithLine(String line, Integer value) {
-        return value + Integer.valueOf(line);
-      }
-    };
-    return lineReadTemplate(filePath, sumCallback, 0);
-  }
-  // 클라이언트에서 콜백 오브젝트 생성.
-  public Integer calMultiply(String filPath) throws IOException {
-    LineCallback multiplyCallback = new LineCallback() {
-      @Override
-      public Integer doSomethingWithLine(String line, Integer value) {
-        return value * Integer.valueOf(line);
-      }
-    };
+    public Integer calcSum(String filePath) throws IOException {
+        LineCallback sumCallback = new LineCallback() {
+            @Override
+            public Integer doSomethingWithLine(String line, Integer value) {
+                return value + Integer.valueOf(line);
+            }
+        };
+        return lineReadTemplate(filePath, sumCallback, 0);
+    }
 
-    return lineReadTemplate(filPath, multiplyCallback, 1);
-  }
-  //..
+    // 클라이언트에서 콜백 오브젝트 생성.
+    public Integer calMultiply(String filPath) throws IOException {
+        LineCallback multiplyCallback = new LineCallback() {
+            @Override
+            public Integer doSomethingWithLine(String line, Integer value) {
+                return value * Integer.valueOf(line);
+            }
+        };
+
+        return lineReadTemplate(filPath, multiplyCallback, 1);
+    }
+    //..
 }    
 ```
 
 ### 제네릭스를 이용한 콜백 인터페이스
+
 - 지금까지 사용한 LineCallback과 lineTemplate()은 템플릿과 콜백이 만들어내는 결과가 Integer타입으로 고정
 - -> 결과의 타입을 다양하게 가져가고 싶으면, 타입 파라미터라는 개념을 도입한 제네릭스를 이용하면 됨!
-- -> 제네릭스를 이용하면 다양한 오브젝트 타입을 지원하는 인터페이스나 메소드를 정의할 수 있음. 
+- -> 제네릭스를 이용하면 다양한 오브젝트 타입을 지원하는 인터페이스나 메소드를 정의할 수 있음.
+
 ```java
 public interface LineCallback<T> {
     T doSomethingWithLine(String line, T value);
 }
 ```
+
 - 템플릿인 lineReadTemplate() 메소드도 타입 파라미터를 사용해 제네릭 메소드로 만들어줌
 
 ```java
-class ex{
-  public <T> T lineReadTemplate(String filePath, LineCallback<T> callback, T initVal) throws IOException {
-    BufferedReader br = null;
-    try {
-      br = new BufferedReader(new FileReader(filePath));
-      T res = initVal;
-      String line = null;
-      while ((line = br.readLine()) != null) {
-        res = callback.doSomethingWithLine(line, res);
-      }
-      return res;
-    } catch (IOException e) {
-      System.out.println(e.getMessage());
-      throw e;
-    } finally {
-      if (br != null) {
+class ex {
+    public <T> T lineReadTemplate(String filePath, LineCallback<T> callback, T initVal) throws IOException {
+        BufferedReader br = null;
         try {
-          br.close();
+            br = new BufferedReader(new FileReader(filePath));
+            T res = initVal;
+            String line = null;
+            while ((line = br.readLine()) != null) {
+                res = callback.doSomethingWithLine(line, res);
+            }
+            return res;
         } catch (IOException e) {
-          System.out.println();
+            System.out.println(e.getMessage());
+            throw e;
+        } finally {
+            if (br != null) {
+                try {
+                    br.close();
+                } catch (IOException e) {
+                    System.out.println();
+                }
+            }
         }
-      }
     }
-  }
 }
 ```
+
 - -> 콜백의 타입 파라미터와 초기값인 initVal타입, 템플릿 결과 값 타입 동일하게 선언해줘야함.
+
 ```java
-class ex{
-  public String concatenate(String filepath) throws IOException {
-    LineCallback<String> concatenateCallback =
-            new LineCallback<String>() {
-              @Override
-              public String doSomethingWithLine(String line, String value) {
-                return value + line;
-              }
-            };
-    // 템플릿 메소드 lineReadTemplate의 T는 모두 스트링이 된다.
-    return lineReadTemplate(filepath, concatenateCallback, "");
-  }
+class ex {
+    public String concatenate(String filepath) throws IOException {
+        LineCallback<String> concatenateCallback =
+                new LineCallback<String>() {
+                    @Override
+                    public String doSomethingWithLine(String line, String value) {
+                        return value + line;
+                    }
+                };
+        // 템플릿 메소드 lineReadTemplate의 T는 모두 스트링이 된다.
+        return lineReadTemplate(filepath, concatenateCallback, "");
+    }
 
 }
 ```
-
 
 ## 스프링의 JdbcTemplate
+
 - 스프링이 제공하는 템플릿/콜백 기술 살펴보기
 - JDBC코드용 기본 템플릿은 **JdbcTemplate**
+
 ```java
 public class UserDao {
-//  private JdbcContext jdbcContext;
-  public JdbcTemplate jdbcTemplate;
+    //  private JdbcContext jdbcContext;
+    public JdbcTemplate jdbcTemplate;
 
-  public void setDataSource(DataSource dataSource) {
+    public void setDataSource(DataSource dataSource) {
 //        this.jdbcContext = new JdbcContext();
 //        this.jdbcContext.setDataSource(dataSource);
-    this.jdbcTemplate = new JdbcTemplate(dataSource);
-  }
-  //...
+        this.jdbcTemplate = new JdbcTemplate(dataSource);
+    }
+    //...
 }
 ```
 
 ### update()
+
 - deleteAll()에 적용했던 콜백은 StatementStrategy 인터페이스의 makePreparedStatement() 메소드
 - 이에 대응되는 JdbcTemplate의 콜백은 PreparedStatementCreator 인터페이스의 createPreparedStatement() 메소드
 - -> 템플릿으로부터 Conntection을 받아서 PreparedStatement를 만들어 준다는 면에서 구조 동일
 - -> PreparedStatementCreator 타입의 콜백을 받아서 사용하는 JdbcTemplate의 템플릿 메소드는 update()
 
 ### queryForInt()
+
 - SQL 쿼리를 실행하고 ResultSet을 통해 결과를 가져오는 코드에 쓸 수 있는 템플릿음
 - PreparedStatementCreator 콜백과 ResultSetExtractor 콜백을 파라미터로 받는 query() 메소드
-```java
-class ex{
-  public int getCount() {
-    return this.jdbcTemplate.query(new PreparedStatementCreator() {
-      @Override
-      public PreparedStatement createPreparedStatement(Connection con) throws SQLException {
-        return con.prepareStatement("select count(*) from users");
-      }
-    }, new ResultSetExtractor<Integer>() {
-      public Integer extractData(ResultSet rs) throws SQLException {
-        rs.next();
-        return rs.getInt(1);
 
-      }
-    });
-  }
-  
-  public int getCount(){ //queryForInt 사용
-    return this.jdbcTemplate.queryForInt("select count(*) from users");
-  }
+```java
+class ex {
+    public int getCount() {
+        return this.jdbcTemplate.query(new PreparedStatementCreator() {
+            @Override
+            public PreparedStatement createPreparedStatement(Connection con) throws SQLException {
+                return con.prepareStatement("select count(*) from users");
+            }
+        }, new ResultSetExtractor<Integer>() {
+            public Integer extractData(ResultSet rs) throws SQLException {
+                rs.next();
+                return rs.getInt(1);
+
+            }
+        });
+    }
+
+    public int getCount() { //queryForInt 사용
+        return this.jdbcTemplate.queryForInt("select count(*) from users");
+    }
 }
 ```
 
 ### queryForObject()
+
 - ResultSet의 결과를 User 오브젝트를 만들어 프로퍼티에 넣어주기
 - 위에서 제네릭 설정 해주었던 ResultSetExtract 콜백 대신 RowMapper 콜백을 사용.
 - -> 차이점은 ResultSetExtractor는 한 번 전달받아 알아서 추출작업을 모두 진행하고 최종 결과만 리턴
-- -> RowMapper는 ResultSet 로우 하나를 매핑하기 때문에 여러번 호출 가능. 
+- -> RowMapper는 ResultSet 로우 하나를 매핑하기 때문에 여러번 호출 가능.
 
 ```java
-class ex{
-  public User get(String id) {
-    return this.jdbcTemplate.queryForObject("select * from users where id = ?",
-            new Object[]{id}, // SQL에 바인딩할 파라미터 값, 가변인자 대신 배열을 사용.
-            new RowMapper<User>() {
-              @Override
-              public User mapRow(ResultSet rs, int rowNum) throws SQLException {
-                User user = new User();
-                user.setId(rs.getString("id"));
-                user.setName(rs.getString("name"));
-                user.setPassword(rs.getString("password"));
-                return user;
-              }
-            });
-  }
+class ex {
+    public User get(String id) {
+        return this.jdbcTemplate.queryForObject("select * from users where id = ?",
+                new Object[]{id}, // SQL에 바인딩할 파라미터 값, 가변인자 대신 배열을 사용.
+                new RowMapper<User>() {
+                    @Override
+                    public User mapRow(ResultSet rs, int rowNum) throws SQLException {
+                        User user = new User();
+                        user.setId(rs.getString("id"));
+                        user.setName(rs.getString("name"));
+                        user.setPassword(rs.getString("password"));
+                        return user;
+                    }
+                });
+    }
 }
 ```
-- -> queryForOjbect()는 SQL 실행해서 받은 로우의 개수가 하나가 아니라면 예외를 던짐. 
+
+- -> queryForOjbect()는 SQL 실행해서 받은 로우의 개수가 하나가 아니라면 예외를 던짐.
 
 ### query()
-#### 기능 정의와 테스트 작성 
+
+#### 기능 정의와 테스트 작성
+
 - 위의 queryForObject()는 쿼리의 결과가 로우 하나일 때 사용
 - query()는 여러 개의 로우가 결과로 나오는 일반적인 경우에 쓸 수 있음.
 - query()는 제네릭 메소드로 타입은 파라미터로 넘기는 RowMapper<T> 콜백 오브젝트에서 결정됨.
+
 ```java
-class ex{
-  public List<User> getAll() {
-    return this.jdbcTemplate.query("select * from users order by id",
-            new RowMapper<User>() {
-              @Override
-              public User mapRow(ResultSet rs, int rowNum) throws SQLException {
-                User user = new User();
-                user.setId(rs.getString("id"));
-                user.setName(rs.getString("name"));
-                user.setPassword(rs.getString("password"));
-                return user;
-              }
-            });
-  }   
+class ex {
+    public List<User> getAll() {
+        return this.jdbcTemplate.query("select * from users order by id",
+                new RowMapper<User>() {
+                    @Override
+                    public User mapRow(ResultSet rs, int rowNum) throws SQLException {
+                        User user = new User();
+                        user.setId(rs.getString("id"));
+                        user.setName(rs.getString("name"));
+                        user.setPassword(rs.getString("password"));
+                        return user;
+                    }
+                });
+    }
 }
 ```
+
 - 첫 번째 파라미터에는 실행할 SQL 쿼리를 넣음
 - 바인딩할 파라미터가 있다면 두 번째 파라미터에 추가 가능
 - 마지막 파라미터는 RowMapper 콜백 -> 가져오는 로우 만큼 호출됨.
 - -> 결과가 없을 경우 크기가 0인 List<T> 오브젝트 반환
 
 ### 테스트 보완 - 네거티브 테스트
+
 - 예외 상황에 대한 테스트 -> 예외적인 조건에 대해 먼저 테스트를 만드는 습관이 좋음
 - ex) get()이라면 Id가 없을 때는 어떻게 되는지, getAll()이라면 결과가 하나도 없는 경우에는 어떻게 되는지 ..
 - query()의 결과와 상관없이 getAll() 메소드의 예외 상황에 대한 테스트 반드시 필요.
 
+## 재사용 가능한 콜백의 분리
 
-
-## 재사용 가능한 콜백의 분리 
 ### DI를 위한 코드정리
+
 ```java
 public class UserDao {
-  public JdbcTemplate jdbcTemplate;
+    public JdbcTemplate jdbcTemplate;
 
-  public void setDataSource(DataSource dataSource) { // DI
-    this.jdbcTemplate = new JdbcTemplate(dataSource);
-  }
-  //..
+    public void setDataSource(DataSource dataSource) { // DI
+        this.jdbcTemplate = new JdbcTemplate(dataSource);
+    }
+    //..
 }
 ```
+
 - -> 수정자 메소드에거 이렇게 다른 오브젝트를 생성하는 경우 종종 있음.
 
 ### 중복 제거
+
 - RowMapper 콜백의 내용이 중복됨
 - -> 매번 RowMapper 오브젝트를 새로 만들어야할지 생각하기
 - -> RowMapper 콜백 오브젝트에는 상태 정보가 없으므로 -> 멀티스레드에서 동시에 사용해도 문제 없음
 - -> 하나만 만들어서 공유하기
+
 ```java
 public class UserDao {
-    private RowMapper<User> userMapper = 
+    private RowMapper<User> userMapper =
             new RowMapper<User>() {
                 @Override
                 public User mapRow(ResultSet rs, int rowNum) throws SQLException {
@@ -2096,20 +2116,23 @@ public class UserDao {
                     return user;
                 }
             };
+
     //...
     public User get(String id) {
-      return this.jdbcTemplate.queryForObject("select * from users where id = ?",
-              new Object[]{id},
-              this.userMapper);
+        return this.jdbcTemplate.queryForObject("select * from users where id = ?",
+                new Object[]{id},
+                this.userMapper);
     }
+
     public List<User> getAll() {
-      return this.jdbcTemplate.query("select * from users order by id",
-              this.userMapper);
+        return this.jdbcTemplate.query("select * from users order by id",
+                this.userMapper);
     }
 }
 ```
 
 ### 템플릿/콜백 패턴과 UserDao
+
 - UserDao에는 User정보를 DB에 넣거나 가져오거나 조작하는 방법에 대한 핵심적인 로직만 담겨 있음
 - -> 응집도가 높음
 - 반면, JDBC API 사용 방식, 예외처리, 리소스 반납, DB 연결등의 책임과 관심은 JdbcTemplate에게 이씅ㅁ
@@ -2120,7 +2143,9 @@ public class UserDao {
 - 스프링에서 클래스 이름이 Template으로 끝나거나 인터페이스 이름이 Callback으로 끝난다면 템프릿/콜백이 적용된 것
 
 ## 정리
+
 ### 전략패턴 적용
+
 - 일정한 작업 흐름이 반복되면서 그중 일부 기능만 바뀌는 코드가 존재한다면 **전략 패턴**을 적용. 바뀌지 않는 부분은 컨텍스트로, 바뀌는 부분은 전략으로 만들고 인터페이스를 통해 유연하게 전략을 변경
 - 여러 전략을 다이나믹하게 구성하고 사용해야한다면 컨텍스트를 이용하는 **클라이언트 메소드에서 직접 전략을 정의하고 제공**하게 만듬
 - **클라이언트 메소드 안에 익명 내부 클래스를 사용하여 전략 오브젝트를 구현**하면 코드 간결, 메소드 정보 직접 사용 가능하여 편리
@@ -2130,51 +2155,61 @@ public class UserDao {
 - 콜백의 코드에도 일정한 패턴이 반복된다면 콜백을 템플릿에 넣고 재활용
 - 템플릿과 콜백의 타입이 다양하게 바뀔 수 있다면 제네릭스 이용
 - 템플릿은 한 번에 하나 이상의 콜백을 사용할 수도 있고 하나의 콜백을 여러번 호출할 수도 있음
-- 템플릿/콜백 설계 시 템플릿과 콜백 사이 주고받는 정보에 관심을 둬야함 
+- 템플릿/콜백 설계 시 템플릿과 콜백 사이 주고받는 정보에 관심을 둬야함
 
+# 예외
 
-# 예외 
 - 예외 처리하는 베스트 프랙티스 살펴보기
 
 ## 사라진 SQLException
+
 - JdbcContext (커스텀 클래스)-> JdbcTemplate으로 바꾸면서 예외 처리 부분이 생략됨
 
 ```java
 import java.sql.SQLException;
 
 class ex {
-  public void deleteAll() throws SQLException{
-      this.jdbcContext.executeSql("delete from users");
-  }
-  public void deleteAll() { //예외 사라짐 !
-      this.jdbcTemplate.update("delete from users");
-  }
+    public void deleteAll() throws SQLException {
+        this.jdbcContext.executeSql("delete from users");
+    }
+
+    public void deleteAll() { //예외 사라짐 !
+        this.jdbcTemplate.update("delete from users");
+    }
 }
 ```
+
 - SQLException은 JDBC API의 메소드들이 던지는 것이므로 당연히 있어야함.
 - 로그를 남기기위해 catch 했다고 해도 다시 JDBC 템플릿 메소드 밖으로 던져서 예외 상황이 발생했다는 사실을 알려야함.
 - -> JdbcTemplate 적용한 코드의 SQLException은 어디로 간 것일까..?
 
 ## 초난감 예외처리
+
 - 잘못된 예외처리 코드 예시
+
 ### 예외 블랙홀
+
 ```
 try{
 //...    
 }catch(SQLException e){ // 예외를 잡고 아무 처리 안하고 있음 ..!
 }
 ```
+
 - -> 원치않는 예외가 발생하는 것보다 훨씬 더 나쁜 일..
+
 ```
 }catch(SQLException e){
     System.out.println(e);
 }
 ```
+
 ```
 }catch(SQLException e){
     e.printStackTrace();
 }
 ```
+
 - -> 위의 코드도 문제가 있음
 - -> 예외는 반드시 처리가 되어야함. 메시지 출력은 예외를 처리한 것이 아님.
 - **예외처리 핵심 원칙** : 모든 예외는 적절하게 복구되든지 아니면 작업을 중단시키고 운영자 또는 개발자에게 분명하게 통보돼야 함.
@@ -2182,75 +2217,85 @@ try{
 - -> 메소드에 throws SQLException을 선언해서 메소드 밖으로 던지고 자신을 호출한 코드에 예외처리 책임을 전가
 
 ### 무의미하고 무책임한 throws
+
 - 아래와 같이 메소드 선언에 throws Exception을 기계적으로 붙이는 것도 매우 좋지 않음
+
 ```java
 class ex {
-  public void method1() throws Exception {
-    method2();
-  }
+    public void method1() throws Exception {
+        method2();
+    }
 
-  public void method2() throws Exception {
-    method3();
-  }
+    public void method2() throws Exception {
+        method3();
+    }
 
-  public void method3() throws Exception {
-    //..
-  }
+    public void method3() throws Exception {
+        //..
+    }
 }
 ```
-- 무책임하게 throws Exception을 사용하는 메소드를 사용하는 메소드도 throws Exception을 따라 붙일 수 밖에 없게 됨.. 
+
+- 무책임하게 throws Exception을 사용하는 메소드를 사용하는 메소드도 throws Exception을 따라 붙일 수 밖에 없게 됨..
 
 ## 예외의 종류와 특징
+
 - 자바에서 throw를 통해 발생시킬 수 있는 예외는 크게 세 가지
 - 1 **Error**
 - 2 **Exception과 체크 예외**
 - 3 **RuntimeException과 언체크/런타임 예외**
 
 ### Error (에러)
-- java.lang.Error 클래스의 서브 클래스들. 
+
+- java.lang.Error 클래스의 서브 클래스들.
 - **에러는 시스템에 뭔가 비정상적인 상황이 발생**했을 경우세 사용됨
 - **주로 자바 VM에서 발생시키는 것**이고 애플리케이션 코드에서 잡으려고 하면 안됨
 - -> OutOfMemoryError나 ThreadDeath 같은 에러는 catch 블록으로 잡아봤자 아무런 대응 방법이 없기 때문
 - -> 따라서 시스템 레벨에서 특별한 작업을 하는 게 아니라면 애플리케이션에서는 이런 에러에 대한 처리는 신경 쓰지 않아도 됨 !
 
 ### Exception과 체크 예외 (일반적으로 예외는 체크 예외 - RuntimException상속x)
-- 개발자들이 만든 애플리케이션 코드의 작업 중에 예외상황이 발생했을 경우에 사용됨. 
+
+- 개발자들이 만든 애플리케이션 코드의 작업 중에 예외상황이 발생했을 경우에 사용됨.
 - **Exception 클래스는 다시 체크 예외와 언체크 예외로 구분**됨
 - **체크예외**는 Exception 클래스의 서브클래스이면서 RuntimeException 클래스를 상속하지 않은 것
 - **언체크예외**는 RuntimeException을 상속한 클래스들임
 - RuntimeException은 Exception의 서브 클래스이긴 하지만, 자바는 RuntimeException과 그 서브클래스는 특별하게 다룸
-![](img/img_8.png)
+  ![](img/img_8.png)
 - **일반적으로 예외**라고하면 RuntimeException을 상속하지 않은 **체크 예외라고 생각**해도 됨
 - 체크 예외가 발생할 수 있는 메소드를 사용할 경우 반드시 예외를 처리하는 코드를 함께 작성해야함 !
 - cf)자바언어와 JDK초기 설계자들은 체크예외를 발생가능한 예외에 모두 적용하려고 했던 것 같음
 - -> 그래서 IOException이나 SQLException을 비롯해서 예외적인 상황에서 던져질 가능성이 있는 것들은 대부분 체크 예외로 만들어져있음.
 - 최근 자바 표준 스펙 API들은 예상가능한 예외상황을 다루는 예외를 체크 예외로 만들지 않는 경향이 있기도 함
-- 
+-
+
 ### RuntimeException과 언체크/런타임 예뢰
+
 - java.lang.RuntimeException 클래스를 상속한 예외들은 명시적인 예외처리를 강제하지 않기 때문에 언체크 예외라고 불림
-- 런타임 예외라고도 함 
+- 런타임 예외라고도 함
 - 에러와 마찬가지로 catch문으로 잡거나 throws로 선언하지 않아도 됨 -> 명시적으로 잡거나 선언해줘도 상관없음
 - 런타임 예외는 주로 프로그램 오류가 있을 때 발생하도록 의도된 것
 - NullPointerException
 - IllegalArgumentException 등
 - -> 이런 예외는 코드에서 미리 조건을 체크하도록 주의깊게 만든다면 피할 수 있음.
 - -> 피할 수 있지만, 개발자가 부주의해서 발생할 수 있는 경우에 발생하도록 만든 것이 런타임 예외
-- -> 런타임 예외는 예상하지 못했던 예외 상황에서 발생하는게 아니기 때문에 굳이 catch나 throws를 사용하지 않아도 되는 것. 
+- -> 런타임 예외는 예상하지 못했던 예외 상황에서 발생하는게 아니기 때문에 굳이 catch나 throws를 사용하지 않아도 되는 것.
 
+## 예외 처리 방법
 
-## 예외 처리 방법 
 - 먼저 예외를 처리하는 일반적인 방법 살펴보고나서 효과적인 예외처리 생각해보기
 
 ### 예외 복구
+
 - 첫번째 예외처리 방법은 예외상황을 파악하고 문제를 해결해서 정상 상태로 돌려놓는 것.
 - ex) 사용자가 파일 읽으려고 시도 중 IOException 발생
 - -> 사용자에게 상황을 알려주고 다른 파일을 이용하도록 안내해서 예외상황을 해결할 수 있음
 - -> 예외로 인해 기본 작업흐름이 불가능하면 다른 작업 흐름으로 자연스럽게 유도해주는 것.
 - -> 이런 경우 예외 상황은 다시 정상으로 돌아오고 예외를 복구했다고 볼 수 있음.
 - -> 단, IOException 에러메시지가 사용자에게 그냥 던져지는것은 예외 복구가 아님
-- -> 예외가 처리 됐으면 애플리케이션에서는 정상적으로 설계된 흐름을 따라 진행되어야함. 
+- -> 예외가 처리 됐으면 애플리케이션에서는 정상적으로 설계된 흐름을 따라 진행되어야함.
 - -> 예외처리 코드를 강제하는 **체크 예외들은 이렇게 예외를 어떤 식으로든 복구할 가능성이 있는 경우**에 사용
 - -> API를 사용하는 개발자로 하여금 예외 상황이 발생할 수 있음을 인식하도록 도와주고 이에 대한 적절한 처리를 시도해보도록 요구하는 것.
+
 ```
 int maxretry = MAX_RETRY;
 while(maxretry-- > 0){
@@ -2267,10 +2312,12 @@ while(maxretry-- > 0){
 }
 throw new RetryFailedException(); //최대 재시도 횟수를 넘기면 직접 예외 발생
 ```
+
 - 사전에 이미 성공 여부를 확인할 수 없고, 재시도가 의미 있는 경우라면 이렇게 최대 횟수만큼 반복적으로 시도함으로써 예외상황에서 복구되게 할 수 있음.
 
 ### 예외처리 회피
-- 두 번째 방법은 예외처리를 자신이 담당하지 않고 자신을 호출한 쪽으로 던져버리는 것. 
+
+- 두 번째 방법은 예외처리를 자신이 담당하지 않고 자신을 호출한 쪽으로 던져버리는 것.
 - throws 문으로 선언해서 예외가 발생하면 알아서 던져지게 하고나, catch문으로 일단 예외를 잡은 후에 로그를 남기고 다시 예외를 던지는 것.
 
 ```java
@@ -2293,22 +2340,28 @@ class ex {
     }
 }
 ```
+
 #### 템플릿/콜백의 예외처리 회피 예시
+
 ```java
 public interface StatementStrategy { //콜백 패턴을 위한 인터페이스 -> 보통 단일 메소드를 가진 인터페이스
-  PreparedStatement makePreparedStatement(Connection c) throws SQLException;
+    PreparedStatement makePreparedStatement(Connection c) throws SQLException;
 }
 ```
+
 - 콜백 오브젝트는 메소드 선언을 보면 SQLException을 자신이 처리하지 않고 템플릿으로 던져버림
 - -> SQLException을 처리하는 일은 콜백 오브젝트의 역할이 아니라고 보기 때문임.
-- -> 콜백 오브젝트의 메소드는 SQLException에 대한 예외를 회피하고 템플릿 레벨에서 처리하도록 해준다. 
+- -> 콜백 오브젝트의 메소드는 SQLException에 대한 예외를 회피하고 템플릿 레벨에서 처리하도록 해준다.
 - -> **예외를 회피하는 것은 예외를 복구하는 것처럼 의도가 분명해야함**.
 
 ### 예외 전환
+
 - 예외 회피와 비슷하게 예외를 복구해서 정상적인 상태로는 만들 수 없기 때문에 예외를 메소드 밖으로 던지는 것
 - -> 아지만 예외회피와 달리, 발생한 예외를 그대로 넘기는 게 아니라, 적절한 예외로 전환해서 던진다는 특징
 - 두가지 목적
+
 #### 의미를 분명하게 해줄 수 있는 예외로 바꾸기 위한 목적
+
 - 보통 API가 발생하는 기술적인 로우레벨을 -> 비즈니스 상황에 적합한 예외로 바꿔주기 위해
 
 ```java
@@ -2329,12 +2382,15 @@ class ex {
     }
 }
 ```  
+
 - 보통은 getCause()를 이용해 전환하는 예외에 원래 발생한 예외를 담아서 중첩 예외를 만드는 것이 좋음
+
 ```
 catch(SQLException e){
   throw DuplicateUserIdException(e); //생성자 이용
 }
 ```
+
 ```
 catch(SQLException e){
   throw DuplicateUesrIdException().initCause(e); //initCause() 이용
@@ -2342,6 +2398,7 @@ catch(SQLException e){
 ```
 
 #### 예외를 처리하기 쉽고 단순하게 만들기 위해 포장하는 목적
+
 - 중첩 예외를 이용해 새로운 예외를 만들고 원인이 되는 예외를 내부에 담아서 던지는 방식은 같음
 - 주로 예외처리를 강제하는 체크예외를 언체크 예외인 런타임 예외로 바꾸는 경우에 사용
 - -> 어차피 복구가 불가능한 예외라면 가능한 빨리 런타임 예외로 포장해 던지게해서 다른 계층의 메소드를 작성할 때 불필요한 예외 선언이 들어가지 않도록
@@ -2350,29 +2407,52 @@ catch(SQLException e){
 - -> 이것은 API가 던지는 예외가 아니라 애플리케이션 코드에서 의도적으로 던지는 예외. -> 이때는 체크 예외가 적절
 - -> 비즈니스적인 예외는 적절한 대응이나 복구 작업이 필요하기 때문.
 
-
 ## 예외처리 전략
+
 ### 런타임 예외의 보편화
+
 - 일반적으로 **체크예외가 일반적인 예외**를 다루고,
 - **언체크 예외는 시스템 장애나 프로그램상의 오류**에 사용됨
 - -> 문제는 **체크 예외**는 복구가능성이 조금이라도 있는, 말그대로 예외적인 상황이기 때문에
 - -> 자바는 이를 처리하는 catch 블록이나 throws 선언을 강제하고 있다는 점
+
 #### 엔터프라이즈 서버 환경에서의 예외
+
 - 엔터프라이스 서버 환경에선 수많은 사용자가 동시에 요청을 보내고 각 요청이 독립적인 작업으로 취급됨
 - -> 하나의 요청을 처리하는 중에 예외가 발생하면 해당 작업만 중단시키면 그만
-- -> 독립형 애플리케이션과 달리, 서버의 특정 계층에서 예외가 발생했을때 작업을 일시 중지하고 
-- -> 사용자와 바로 커뮤니케이션 하면서 예외 상황을 복구할 수 있는 방법이 없음 
+- -> 독립형 애플리케이션과 달리, 서버의 특정 계층에서 예외가 발생했을때 작업을 일시 중지하고
+- -> 사용자와 바로 커뮤니케이션 하면서 예외 상황을 복구할 수 있는 방법이 없음
 - -> 차라리 애플리케이션 차원에서 예외상황을 미리 파악하고 예외가 발생하지 않도록 차단하는 게 좋음.
-- -> 또는 프로글매 오류나 외부 환경으로인해 예외가 밸상하는 경우라면
+- -> 또는 프로그램 오류나 외부 환경으로인해 예외가 밸상하는 경우라면
 - -> 빨리 해당요청의 작업을 취소하고 서버 관리자나 개발자에게 통보해주는 편이 나음.
 - 자바의 환경이 서버로 이동하면서 체크 예외의 활용도와 가치가 점점 떨어지고 있음.
-- -> 대응이 불필요한 테크예외라면 빨리 런타임 예외로 전환해서 던지는 것이 나음.
-- -> 최근엔 항상 복구할 수 있는 예외가 아니라면 일단 언체크로 만드는 경향이 있음. 
-- -> 언체크 예외라도 얼마든지 catch블록으로 잡아서 복구하거나 처리할 수 있음. 
+- -> 대응이 불필요한 체크예외라면 빨리 런타임 예외로 전환해서 던지는 것이 나음.
+- -> 최근엔 항상 복구할 수 있는 예외가 아니라면 일단 언체크로 만드는 경향이 있음.
+- -> 언체크 예외라도 얼마든지 catch블록으로 잡아서 복구하거나 처리할 수 있음.
 - -> 하지만 대개는 복구 불가능 상황이고 런타임 예외로 포장해서 던져야 하므로 아예 API 차원에서 런타임 예외를 던지도록 만들고 있는 추세
 
+### add() 메소드의 예외처리
 
+- SQLExeption은 대부분 복구 불가능한 예외이므로 잡아봤자 처리할 것도 없고, 결국 throws 타고 앞으로 계속 전달되다가 애플리케이션 밖으로 던져질 것
+- 그럴바에는 그냥 런타임 예외로 포장해서 던져버려서 그 밖의 메소드들이 신경쓰지 않게 해주는 편이 나음.
+- DuplicatedUserIdException도 굳이 체크 예외로 둬야하는 것은 아님
+- DuplicatedUserIdExceptionc처럼 의미 있는 예외는 add() 메소드를 바로 호출한 오브젝트 대신 더 앞단의 오브젝트에서 다룰 수도 있음.
+- -> **어디에서든 DuplicatedIdException을 잡아서 처리할 수 있다면 굳이 체크예외로 만들지 않고 런타임 예외로 만드는 게 나음**
+- -> 대신 add()메소드는 명시적으로 DuplicatedUserIdException을 던진다고 선언해야함.
+- 그래야 add() 메소드를 사용하는 코드를 만드는 개발자에게 의미 있는 정보를 전달해줄 수 있음.
+- -> 런타임 예외도 throws로 선언할 수 있으니 문제될 것은 없음.
 
+#### 체크 예외 대신 런타임에러로 선언 예시
+```java
+public class DuplicateUserIdException extends RuntimeException { //필요없다면 신경쓰지 않아도 되도록 RuntimeException을 상속..
+    public DuplicateUserIdException(Throwable cause) { //중첩예외를 만들 수 있도록 생성자를 추가
+        super(cause);
+    }
+}
+```
+- 사용자 아이디가 중복 됐을 때 사용하는 DuplicateUserIdException을 만듬
+- 필요하다면 언제든 잡아서 처리할 수 있도록 별도의 예외로 정의하기는 하지만, 필요없다면 신경쓰지 않아도 되도록 RuntimeException을 상속한 런타임 예외로 만듬.
+- 중첩예외를 만들 수 있도록 생성자를 추가.
 
 
 
