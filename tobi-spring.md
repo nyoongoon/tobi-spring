@@ -2443,6 +2443,7 @@ catch(SQLException e){
 - -> 런타임 예외도 throws로 선언할 수 있으니 문제될 것은 없음.
 
 #### 체크 예외 대신 런타임에러로 선언 예시
+
 ```java
 public class DuplicateUserIdException extends RuntimeException { //필요없다면 신경쓰지 않아도 되도록 RuntimeException을 상속..
     public DuplicateUserIdException(Throwable cause) { //중첩예외를 만들 수 있도록 생성자를 추가
@@ -2450,9 +2451,147 @@ public class DuplicateUserIdException extends RuntimeException { //필요없다�
     }
 }
 ```
+
 - 사용자 아이디가 중복 됐을 때 사용하는 DuplicateUserIdException을 만듬
 - 필요하다면 언제든 잡아서 처리할 수 있도록 별도의 예외로 정의하기는 하지만, 필요없다면 신경쓰지 않아도 되도록 RuntimeException을 상속한 런타임 예외로 만듬.
 - 중첩예외를 만들 수 있도록 생성자를 추가.
+
+```java
+import org.user.dao.DuplicateUserIdException;
+
+import java.sql.SQLException;
+
+class ex {
+    public void add() throws DuplicatedUserIdException {
+        try {
+            //SQLException을 던지는 로직
+        } catch (SQLException e) {
+            if (e.getErrorCode() == MysqlErrorNumbers.ER_DUP_ENTRY) {
+                throw new DuplicateUserIdException(e); // 예외 전환
+            } else {
+                throw new RuntimeException(e); // 예외 포장
+            }
+        }
+    }
+}
+```
+
+- -> 메소드 밖으로 던지던 SQLException을 런타임 예외로 전환해서 던지도록 함
+- -> 시스템 예외에 해당하는 SQLException은 언체크로 포장
+- -> 언체크로 만들었긴 했지만, 메소드 사용하는 쪽에서 아이디 중복 처리를 하고 싶은 경우 활용할 수 있음을 알려주도록
+- -> DuplicatedUserIdException 메소드를 throws 선언에 포함시킴.
+- -> ex) 아이디 중복 상황이라면 대신 사용 가능한 추천아이디 만들어 주는 등의 로직 추가 가능.
+
+#### 런타임 예외의 일반화 사용
+
+- 위처럼 런타임 예외를 일반화해서 사용하는 방법은 장점이 많음
+- 컴파일러가 예외처리를 강제하지 않으므로 주의해서 사용 필요
+- -> 런타임 예외를 사용하는 경우 API문서나 레퍼선스 문서를 통해, 메소드를 사용할 때 발생할 수 있는 예외의 종류와 원인, 활용방법 설명해둬야함.
+
+### 애플리케이션 예외 (체크 예외의 활용 - 비즈니스 로직 예외)
+- 런타임 예외 중심의 전략은 이름을 붙이자면 "낙관적인 예외처리"기법이라고 할 수 있음.
+- -> 일단 복구할 수 있는 예외는 없다고 가정하고 예외가 생겨도 어차피 런타임 예외이므로,
+- -> 시스템 레벨에서 알아서 처리해줄것이고, 꼭 필요한 경우는 런타임 예외라도 잡아서 복구하거나 대응해줄 수 있으니
+- -> 문제될 것이 없다는 낙관적인 태도를 기반으로 하고 있음.
+- **반면에, 시스템 또는 예외상황이 원인이 아니라, 애플리케이션 자체의 로직에 의해 의도적으로 발생시키고, 반드시 catch해서 조치를 취하도록 요구하는 예외도 있음**
+- -> 이런 예외들을 일반적으로 **애플리케이션 예외.**
+
+#### ex) 애플리케이션 예외 상황 예시
+- 사용자가 은행 계좌에서 출금하는 기능을 가진 메소드
+- -> 잔고를 확인해서 허용 범위를 체크하고, 중단, 경고의 경우가 포함되어야함.
+
+##### 예외 메소드 설계 방법 두가지
+- 1 정상과, 비정상 처리 경우 각각의 다른 종류의 리턴값 돌려주기
+- 2 예외 상황에서는 비즈니스적 의미를 띈 예외를 던지도록하기
+
+##### 정상과, 비정상 처리 경우 각각의 다른 종류의 리턴값 돌려주기
+- 이러한 경우 메소드를 호출한 쪽에서 반드시 리턴값을 확인해서 이후 작업 흐름을 달리해야함.
+- -> 예외상황에 대한 리턴값을 명확하게 코드화 하고 잘 관리하지 않으면 혼란이 발생
+- -> if문 블록 범벅이 될 수 있음.
+##### 예외 상황에서는 비즈니스적 의미를 띈 예외를 던지도록하기 -> 체크예외로 선언
+- 잔고부족인 경우 InsufficientBalanceException 등을 던지기.
+- -> 예외 상황을 처리하는 catch 블록을 메소드 호출 직후 둘 필요는 없음
+- -> 정상적인 흐름을 따르지만 예외가 발생할 수 있는 코드를 try 불록안에 깔끔하게 정리해두고,
+- -> 예외 상황에 대한 처리는 catch 블록에 모아 둘 수 있음
+- 이때 사용하는 예외는 의도적으로 체크 예외로 만들기
+- -> 개발자가 잊지 않고 잔고부족처럼 **자주 발생 가능한 예외 상황에 대한 로직을 구현하도록 강제**하는 것이 좋음.
+
+```java
+import javax.naming.InsufficientResourcesException;
+import java.math.BigDecimal;
+
+class ex {
+    public void ex() {
+        try {
+            BigDecimal balance = account.withdraw(amount);
+            //..
+        } catch (InsufficientResourcesException e) { // 체크 예외 !
+            // InsufficientBalanceException에 담긴 인출 가능한 잔고 금액 정보 가져옴
+            BigDecimal availFunds = e.getAvailFunds();
+            // 잔고 부족 안내 메시지를 준비하고 이를 출력..
+        }
+    }
+}
+```
+
+
+### SQLException은 어떻게 됐나?
+- SQLException의 99%상황은 복구 불가능한 상황
+- ex) SQL 문법이 틀렸거나, 제약조건을 위반했거나, DB 서버가 다운됐거나, 네트워크가 불안정하거나, DB커넥션 풀이 꽉차거나..
+- -> 필요없는 기계적 throws 선언 방치 말고 언체크/런테임 예외로 전환
+- -> 스프링 JdbcTemplate은 이 예외처리 전략을 따르고 있음. 
+- -> JdbcTEmplate 템플릿과 콜백 안에서 발생하는 모든 SQLException을 런타임 예외인 DataAccessException으로 포장해서 던져줌.
+- -> 꼭 **필요한 경우만 런타임 예외인 DataAccessException을 잡아서 처리**하면 되고 나머지는 무시가능.
+```
+public int update(final String sql) throws DataAccessException { ... }
+```
+- -> throws로 선언되어 있긴 하지만, DataAccessException이 런타임 예외이므로 update()를 사용하는 메소드에서 이를 잡거나 던질 의무가 없음 
+
+
+## 예외 전환 
+- 예외 전환의 목적은 두 가지
+- -> 1. 굳이 필요하지 않은 catch/throws를 줄여주는 것.
+- -> 2. 다른 하나는 로우레벨의 예외를 좀 더 의미있고 추상화된 예외로 바꿔서 던지는 것.
+### ex) JdbcTemplate의 DataAccessException
+- 런타임 예외로 SQLException을 포장해주는 역할 -> SQLExcepion에 대해 애플리케이션 레벨에서는 신경 쓰지 않도록 해줌
+- 또한, SQLException으로 다루기 힘든 상세한 예외정보를 의미있고 일관성 있는 예외로 전환해서 추상화해주려는 용도도 있음. 
+
+### JDBC의 한계 
+- 현실적으로 db를 자유롭게 바꾸어 사용하는 DB 프로그램을 작성하는데에는 두가지 걸림돌 있음
+#### 비표준 SQL
+- 첫째문제는 JDBC 코드에서 사용하는 SQL.
+- 대부분의 DB는 표준을 따르지 않는 비표준 문법과 기능도 제공. 
+#### 호환성 없는 SQLEception의 DB 에러 정보
+- 문제는 DB마다 SQL만 다른 것이 아니라, 에러의 종류와 원인도 제각각이라는 점.
+- -> 그래서 JDBC는 데이터 처리 중 발생하는 다양한 예외를 그냥 SQLException 하나에 담아버림. 
+- -> JDBC API는 이 SQLException 하나만 던지도록 설계되어 있음. 
+- -> 그래서 SQLException은 예외가 발생했을 떄의 DB 상태를 담은 SQL 상태정보를 부가적을 ㅗ제공
+- -> getSQLState() 메소드로 예외 상황에 대한 상태정보를 가져올 수 있음
+- -> DB 별로 달라지는 에러코드를 대신할 수 있도록, Open Group의 XOPEN SQL 스펙에 정의된 SQL 상태코드를 따름. 
+- -> 문제는 DB의 JDBC 드라이버에서 SQLException을 담을 상태코드를 정확하게 만들어주지 않음 
+- -> 호환성 없는 에러코드와 표준을 잘 따르지 않은 상태코드를 가진 SQLException으로 DB에 독립적인 유연한 코드 작성하는 것은 불가능
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

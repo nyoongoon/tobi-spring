@@ -32,6 +32,8 @@ public class UserDao {
                 user.getId(), user.getName(), user.getPassword());
     }
 
+
+
     public User get(String id) {
         return this.jdbcTemplate.queryForObject("select * from users where id = ?",
                 new Object[]{id}, // SQL에 바인딩할 파라미터 값, 가변인자 대신 배열을 사용.
