@@ -22,10 +22,10 @@ import static org.junit.Assert.assertThrows;
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(locations = "/org/user/dao/DaoFactory.java")
 @DirtiesContext
-public class UserDaoTest {
+public class UserDaoJdbcTest {
 
     @Autowired
-    private UserDao dao;
+    private UserDaoJdbc dao;
     private User user1;
     private User user2;
     private User user3;

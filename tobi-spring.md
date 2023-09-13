@@ -243,10 +243,10 @@ public class UserDaoTest { // 클라이언트 오브젝트
 
 ```java
 public class DaoFactory {
-    public UserDao userDao() {
+    public UserDao userDaoJdbc() {
         ConnectionMaker connectionMaker = new DConnectionMaker();
-        UserDao userDao = new UserDao(connectionMaker);
-        return userDao;
+        UserDao userDaoJdbc = new UserDao(connectionMaker);
+        return userDaoJdbc;
     }
 }
 ```
@@ -254,7 +254,7 @@ public class DaoFactory {
 ```java
 public class UserDaoTest {
     public static void main(String[] args) throws ClassNotFoundException, SQLException {
-        UserDao dao = new DaoFactory().userDao();
+        UserDao dao = new DaoFactory().userDaoJdbc();
         //...
     }
 }
@@ -273,7 +273,7 @@ public class UserDaoTest {
 
 ```java
 public class DaoFactory {
-    public UserDao userDao() {
+    public UserDao userDaoJdbc() {
         return new UserDao(connectionMaker());
     }
 
@@ -338,7 +338,7 @@ public class DaoFactory {
 @Configuration
 public class DaoFactory {
     @Bean
-    public UserDao userDao() {
+    public UserDao userDaoJdbc() {
         return new UserDao(connectionMaker());
     }
 
@@ -362,13 +362,13 @@ public class UserDaoTest {
     public static void main(String[] args) throws ClassNotFoundException, SQLException {
         ApplicationContext context =
                 new AnnotationConfigApplicationContext(DaoFactory.class);
-        UserDao dao = context.getBean("userDao", UserDao.class);
+        UserDao dao = context.getBean("userDaoJdbc", UserDao.class);
         //...
     }
 }
 ```
 
-- -> getBean()의 파라미터인 "userDao"는 ApplicationContext에 등록된 빈의 이름
+- -> getBean()의 파라미터인 "userDaoJdbc"는 ApplicationContext에 등록된 빈의 이름
 - @Bean이라는 애노테이션을 userDao라는 이름의 메소드에 붙였는데, 메소드 이름이 바로 빈의 이름이 됨
 
 ##### 메소드 이름을 빈의 이름으로 사용하는 이유
@@ -682,7 +682,7 @@ public UserDao(){
 - -> 세터 주입인 경우, 세터 메소드는 프로퍼티가 됨(set제외부분)
 
 ```
-userDao.setConnectionMaker(connectionMaker());
+userDaoJdbc.setConnectionMaker(connectionMaker());
 =>
 <property name="connectionMaker" ref="connectionMaker" />
 ```
@@ -693,7 +693,7 @@ userDao.setConnectionMaker(connectionMaker());
 
 <beans>
     <bean id="connectionMaker" class="springbook.user.daoDConnectionMaker"/>
-    <bean id="userDao" class="springbook.user.dao.UserDao">
+    <bean id="userDaoJdbc" class="springbook.user.dao.UserDao">
         <property name="connectionMaker" ref="connectionMaker"/>
     </bean>
 </beans>
@@ -776,11 +776,11 @@ public class DaoFactory {
     }
 
     @Bean
-    public UserDao userDao() {
+    public UserDao userDaoJdbc() {
 //        return new UserDao(connectionMaker());
-        UserDao userDao = new UserDao();
-        userDao.setDataSource(dataSource());
-        return userDao;
+        UserDao userDaoJdbc = new UserDao();
+        userDaoJdbc.setDataSource(dataSource());
+        return userDaoJdbc;
     }
 }
 ```
@@ -923,7 +923,7 @@ public void setUp(){
     ApplicationContext context =
             new AnnotationConfigApplicationContext(DaoFactory.class);
     
-    this.dao = context.getBean("userDao", UserDao.class);
+    this.dao = context.getBean("userDaoJdbc", UserDao.class);
 }
 ```
 
@@ -2565,28 +2565,85 @@ public int update(final String sql) throws DataAccessException { ... }
 - 문제는 DB마다 SQL만 다른 것이 아니라, 에러의 종류와 원인도 제각각이라는 점.
 - -> 그래서 JDBC는 데이터 처리 중 발생하는 다양한 예외를 그냥 SQLException 하나에 담아버림. 
 - -> JDBC API는 이 SQLException 하나만 던지도록 설계되어 있음. 
-- -> 그래서 SQLException은 예외가 발생했을 떄의 DB 상태를 담은 SQL 상태정보를 부가적을 ㅗ제공
+- -> 그래서 SQLException은 예외가 발생했을 떄의 DB 상태를 담은 SQL 상태정보를 부가적으로 제공
 - -> getSQLState() 메소드로 예외 상황에 대한 상태정보를 가져올 수 있음
 - -> DB 별로 달라지는 에러코드를 대신할 수 있도록, Open Group의 XOPEN SQL 스펙에 정의된 SQL 상태코드를 따름. 
 - -> 문제는 DB의 JDBC 드라이버에서 SQLException을 담을 상태코드를 정확하게 만들어주지 않음 
 - -> 호환성 없는 에러코드와 표준을 잘 따르지 않은 상태코드를 가진 SQLException으로 DB에 독립적인 유연한 코드 작성하는 것은 불가능
 
+### DB 에러코드 매핑을 통한 전환
+- DB 종류에 상관없이 동일한 상황에서 일관된 예외를 전달받을 수 있다면 효과적인 대응이 가능 
+- 스프링은 **DataAccessException**이라는 SQLException을 대체할 수 있는 런타입 예외를 정의하고 있을 뿐 아니라
+- **DataAccessException의 서브클래스**로 세분화된 예외 클래스들을 정의하고 있음
+- BadSqlGrammarException : SQL 문법 때문에 발생하는 에러
+- DataAccessResourceFailureException : DB 커넥션을 가져오지 못했을 때 발생
+- DataIntegrityViolationException : 데이터 제약조건을 위배했거나 일관성을 지키지 않은 작업을 수행
+- DuplicatedKeyException : 중복키 때문에 발생한 경우
+- -> 스프링은 DB별로 에러코드를 분류해서 스프링이 정의한 예외 클래스와 매필해놓은 에러 코드 매핑 정보 테이블을 만들어주고 이를 이용
+
+#### DataAccessException  
+- JdbcTemplate은 SQLException을 단지 런타임 예외인 DataAccessException으로 포장하는 것이 아니라
+- -> DB의 에러 코드를 DataAccessException 계층구조의 클래스 중 하나로 매핑시켜줌.
+- -> DB가 달라져도 같은 종류의 에러라면 동일한 예외를 받을 수 있음
+```java
+class ex{
+    public void add() throws DuplicateKeyException{
+        //JdbcTEmplate을 이용해 User를 add하는 코드
+    }
+}
+```
+- -> JdbcTemplate은 체크 예외인 SQLException을 런타임 예외인 DataAccessException 계층구조의 예외로 포장해주기 때문에
+- -> add()에 예외 포장을 의한 코드가 필요 없음
+- -> add() 메소드를 사용하는 쪽에서 중복키 상황에 대한 대응이 필요한 경우 참고할 수 있도록
+- -> **DuplicateKeyException을 선택적(런타임예외인DataAccessException의 서브 클래스)**으로 메소드 선언에 넣어주면 편리
+
+### DAO 인터페이스와 DataAccessException 계층 구조 
+- DataAccessException은 의미가 같은 예외라면 데이터 엑세스 기술의 종류와 상관없이 일관된 예외가 발생하도록 만들어줌.
+
+#### DAO 인터페이스와 구현의 분리
+- DAO를 따로 만들어서 사용하는 이유 두가지
+- 1 데이터 엑세스 로직을 담은 코드를 성격이 다른 코드에서 분리해놓기 위해
+- 2 분리된 DAO는 전략패턴을 적용해 구현 방법을 변경해서 사용할 수 있게 만들기 위해서 
+- -> DAO의 사용 기술과 구현 코드는 전략패턴과 DI를 통해서 DAO를 사용하는 클라이언트에게 감출 수 있지만
+- -> 메소드 선언에 나타나는 예외정보가 문제가 될 수 있음
+```java
+public interface UserDao{
+    public void add(User user); // 이렇게 선언하는 것이 가능?
+}
+```
+- UserDao의 인터페이스르 분리해서 기술에 독립적인 인터페이스로 만들려면 위처럼 정의해야함
+- 하지만 DAO에서 사용하는 데이터 엑세스 기술의 API가 예외를 던지기 떄문에 위 같은 메소드 선언은 사용할 수 없음.
+- 만약 JDBC API를 사용하는 UserDao 구현 클래스의 add()메소드라면 SQLExceptino을 던질 것
+- -> 인터페이스의 메소드 선언에 없는 예외를 구현 클래스 메소드의 throws에 넣을 수 없음
+```java
+public interface UserDao{
+  public void add(User user) throws SQLException;
+}
+```
+- 그러나 위처럼 정의한 메소드는 JDBC가 아닌 기술로 DAO를 구현하면 사용할 수가 없음. 기술들이 자신만의 독자적인 예외를 던지기 떄문
+```
+public void add(User user) throws PersistentException; //JPA
+public void add(User user) throws HibernateException; //Hibernate
+public void add(User user) throws JdoException; //JDO
+```
+- -> 구현 기술마다 던지는 예외가 다르므로 기술에 완전히 독립적으로 만들 수 없는 상황
+- -> 단지 인터페이스로 추상화하고 일부 기술에서 발생하는 체크예외를 런타임 예외로 전환하는 것만으로는 불충분. 
+
+#### 데이터 엑세스 예외 추상화와 DataAccessException 계층구조
+- 그래서 스프링은 자바의 다양한 데이터 엑세스 기술을 사용할 때 발생하는 예외들을 추상화해서 DataAccessException 계층구조안에 정리해놓음
+- 앞서 JdbcTemplate에서 보았떤 DataAccessException 클래스들이 단지 SQLException을 전환하는 용도로만 쓰이는 건 아님. 
+- **DataAccessException**은 자바의 주요 **데이터 엑세스 기술에서 발생할 수 있는 대부분 예외를 추상화**하고 있음.
+- InvalidDataAccessResourceUsageException : 엑세스 기술을 부정확하게 사용
+- OjbectOptimisticLockingFailureException : ORM에서 낙관적인 락킹 발생 시
+- ex) 직접 낙관적인 락킹 기능을 구현했다고 하면 슈퍼클래스인 OptimisticLockingFailureException을 상속해서 정의할 수도 있음
+![](/img/img_9.png)
+
+- IncorrectResultSizeDataAccessException : 쿼리실행결과의 사이즈 다를떄 -> queryForObject는 서브클래스인 EmptyResultDataAccessException을 발생
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+### 기술에 독립적인 UserDao 만들기 
+#### 인터페이스 적용
+- UserDao 클래스를 인터페이스와 구현으로 분리해보기 
 
 
 

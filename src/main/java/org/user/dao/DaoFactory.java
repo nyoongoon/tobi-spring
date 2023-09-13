@@ -27,10 +27,10 @@ public class DaoFactory {
 //    }
 
     @Bean
-    public UserDao userDao(){
-        UserDao userDao = new UserDao();
-        userDao.setDataSource(dataSource());
-        return userDao;
+    public UserDaoJdbc userDao(){ //빈의 이름은 클래스 이름이 아니라 구현 클래스의 이름을 따름
+        UserDaoJdbc userDaoJdbc = new UserDaoJdbc();
+        userDaoJdbc.setDataSource(dataSource());
+        return userDaoJdbc;
     }
 
 }
