@@ -1,6 +1,12 @@
 package org.user.domain;
 
-public class User{
+import org.user.dao.Level;
+
+public class User {
+    Level level;
+    int login;
+    int recommend;
+
     String id;
     String name;
     String password;
@@ -12,6 +18,13 @@ public class User{
         this.id = id;
         this.name = name;
         this.password = password;
+    }
+
+    public Level getLevel(){
+        return level;
+    }
+    public void setLevel(Level level) {
+        this.level = level;
     }
 
     public String getId() {

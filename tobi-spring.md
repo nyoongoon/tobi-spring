@@ -2643,7 +2643,169 @@ public void add(User user) throws JdoException; //JDO
 
 ### 기술에 독립적인 UserDao 만들기 
 #### 인터페이스 적용
-- UserDao 클래스를 인터페이스와 구현으로 분리해보기 
+- UserDao 클래스를 인터페이스와 구현으로 분리해보기
+```java
+public interface UserDao {
+    void add(User user);
+    User get(String id);
+    List<User> getAll();
+    void deleteAll();
+    int getCount();
+}
+```
+- 의존 관계 수정
+```java
+@Configuration
+public class DaoFactory {
+    //..
+    @Bean
+    public UserDaoJdbc userDao(){ //빈의 이름은 클래스 이름이 아니라 구현 클래스의 이름을 따름
+        UserDaoJdbc userDaoJdbc = new UserDaoJdbc();
+        userDaoJdbc.setDataSource(dataSource());
+        return userDaoJdbc;
+    }
+}
+```
+
+#### DataAccessException 활용 시 주의사항
+- DuplicateKeyException 같은 경우 아직까지는 JDBC를 이용하는 경우에만 발생함.
+- -> 따라서, DAO에서 사용하는 기술의 종류와 상관없이 동일한 예외를 얻고 싶다면 DuplicatedUserIdException 처럼 직접 예외를 정의해두고,
+- -> 각 DAO의 add() 메소드에서 좀 더 상세한 예외 전환을 해줄 필요가 있다. 
+- -> SQLException을 직접 해석해서 DataAccessException으로 변환해주는 코드의 사용법 살펴보기...
+##### SQLExceptionTranslator
+- DB에러 코드를 이용하여, SQLExceptionTranslator 인터페이스를 구현한 클래스 중에서
+- -> SQLErrorCodeSQLExceptionTranslator를 사용하기.
+- -> 에러코드 변환에 필요한 DB의 종류를 알아내기 위해 현재 연결된 DataSource를 필요로함.
+```java
+class ex{
+  @Test
+  public void sqlExceptionTranslate() {
+    dao.deleteAll();
+    try {
+      dao.add(user1);
+      dao.add(user1);
+    } catch (DuplicateKeyException ex) {
+      SQLException sqlEx = (SQLException) ex.getRootCause();
+      SQLExceptionTranslator set =
+              new SQLErrorCodeSQLExceptionTranslator(this.dataSource);
+
+      assertThat(set.translate(null, null, sqlEx), is(DuplicateKeyException.class))
+    }
+  }
+}
+```
+## 정리
+- 예외를 잡아서 아무런 조취를 취하지 않거나 의미없는 thorws 선언을 남발하는 것은 위험
+- 예외는 복구하거나 예외처리 오브젝트로 의도적으로 전달하거나 적절한 예외로 전환해야함
+- 예외 전환 : 좀 더 의미있는 예외로 변경 or 불필요한 catch/throws를 피하기 위해 런타임 예외로 포장
+- **복구할 수 없는 예외**는 가능한 **빨리 런타임 예외로** 전환
+- **애플리케이션의 로직**을 담기 위한 예외는 **체크 예외로**
+- JDBC의 SQLException은 대부분 복구할 수 없는 예외이므로 런타임 예외로 포장해야함
+- SQLException의 에러코드는 DB에 종속되기 때문에 DB에 독립적인 예외로 전환될 필요가 있음
+- 스프링은 DataAccessException을 통해 DB에 독립적으로 적용 가능한 추상화된 런타임예외 계층을 제공함
+- DAO를 데이터 엑세스 기술에서 독립시키려면 인터페이스 도입과 런타임 예외 전환, 기술에 독립적인 추상화된 예외로 전환이 필요함.
+
+
+# 5장 서비스 추상화
+- DAO에 트랜잭션을 적용해보면서 스프링이 어떻게 성격이 비슷한 여러 종류의 기술을 추상화하고 일관된 방법으로 사용할 수 있도록 지원하는지 살펴보기
+
+## 사용자 레벨 관리 기능 추가
+```
+- 구현해야할 비즈니스 로직
+- 사용자의 레벨은 BASIC, SIVER, GOLD 세가지 중 하나
+- 사용자가 처음 가입하면 BASIC 레벨이 되며, 이후 활동에 따라서 한 단계씩 업그레이드될 수 있음
+- 가입 후 50회 이상 로그인 하면 BASIC에서 SILVER 레벨이 됨
+- SILVER 레벨이면서 30번 이상 추천을 받으면 GOLD 레벨이 됨
+- 사용자 레벨의 변경 작업은 일정한 주기를 가지고 일괄적으로 진행됨. 변경작업 전에는 조건을 충족하더라도 레벨의 변경이 일어나지 않음.
+```
+
+### 필드 추가
+#### LEVEL 이늄
+- 먼저 User 클래스에 사용자의 레벨을 저장할 필드를 추가
+- User에 추가할 프로퍼티 타입이 숫자면 타입이 안전하지 않아서 위험할 수 있음. 
+```java
+// 예시 안전하지 않은 타입 예시
+public class User {
+  private static final int BASIC = 1;
+  private static final int SILVER = 2;
+  private static final int GOLD = 3;
+
+  int level;
+  //..
+  
+  public void setLevel(int level) {
+    this.level = level;
+  }
+}
+```
+```
+// 사용자 레벨 상수 값을 이용한 코드
+if(user1.getLevel() == User.BASIC){
+  user1.getLevel(User.SILVER);
+}
+```
+- -> 문제는 level의 타입이 int 이기 떄문에 다음처럼 다른 종류의 정보를 넣는 실수를 해도 컴파일러가 체크해주지 못함!
+```
+user1.setLevel(1000);
+```
+- -> 따라서 숫자타입을 직접 사용하는 것보다 이늄을 이용하는게 안전하고 편리함!
+
+```java
+public enum Level {
+    BASIC(1), SILVER(2), GOLD(3);
+    private final int value;
+
+    Level(int value) {
+        this.value = value;
+    }
+
+    public int intValue(){
+        return value;
+    }
+
+    public static Level valueOf(int value){
+        switch (value){
+            case 1 : return BASIC;
+            case 2 : return SILVER;
+            case 3 : return GOLD;
+            default: throw new AssertionError("Unknown value: " + value);
+        }
+    }
+}
+```
+```java
+// User필드에 Enum 추가
+public class User {
+  Level level;
+  int login;
+  int recommend;
+
+  //...
+  public Level getLevel(){
+    return level;
+  }
+  public void setLevel(Level level) {
+    this.level = level;
+  }
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

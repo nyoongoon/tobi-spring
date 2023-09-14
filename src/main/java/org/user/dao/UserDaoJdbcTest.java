@@ -5,6 +5,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
+import org.springframework.jdbc.support.SQLErrorCodeSQLExceptionTranslator;
+import org.springframework.jdbc.support.SQLExceptionTranslator;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
@@ -26,6 +28,9 @@ public class UserDaoJdbcTest {
 
     @Autowired
     private UserDaoJdbc dao;
+    @Autowired
+    DataSource dataSource;
+
     private User user1;
     private User user2;
     private User user3;
@@ -118,4 +123,20 @@ public class UserDaoJdbcTest {
         assertThat(user1.getName(), is(user2.getName()));
         assertThat(user1.getPassword(), is(user2.getPassword()));
     }
+
+    @Test
+    public void sqlExceptionTranslate() {
+        dao.deleteAll();
+        try {
+            dao.add(user1);
+            dao.add(user1);
+        } catch (DuplicateKeyException ex) {
+            SQLException sqlEx = (SQLException) ex.getRootCause();
+            SQLExceptionTranslator set =
+                    new SQLErrorCodeSQLExceptionTranslator(this.dataSource);
+
+            assertThat(set.translate(null, null, sqlEx), is(DuplicateKeyException.class))
+        }
+    }
+
 }
