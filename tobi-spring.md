@@ -2781,26 +2781,119 @@ public class User {
   int recommend;
 
   //...
-  public Level getLevel(){
+  public Level getLevel() {
     return level;
   }
+
   public void setLevel(Level level) {
     this.level = level;
   }
+}
 ```
 
+#### 사용자 수정 기능 추가
+- 수정할 정보가 담긴 User오브젝트를 전달하면 id를 참고해서 사용자를 찾아 
+- 필드 정보를 UPDATE문을 이용해 모두 변경해주는 메소드 만들기
 
 
+#### 수정 기능 테스트 추가
+```java
+class ex{
+  @Test
+  public void update(){
+    dao.deleteAll();
+    dao.add(user1);
+    user1.setName("오민규");
+    user1.setPassword("springno6");
+    user1.setLevel(Level.GOLD);
+    user1.setLogin(1000);
+    user1.getRecommend(999);
+    dao.update(user1);
 
+    User user1update = dao.get(user1.getId());
+    checkSameUser(user1, user1update);
+  }
+}
+```
+```java
+class ex{
+  public void update(User user) {
+    this.jdbcTemplate.update(
+            "update users set name = ?, password = ?, level = ?, login = ? "+
+                    "recommend = ? where id =? ", user.getName(), user.getPassword(),
+            user.getLevel().intValue(), user.getLogin(), user.getRecommend(),
+            user.getId());
+  }
+}
+```
+#### 수정 테스트 보완
+- update문이 실행되어도 정말 값이 수정되었는지 확인하는 로직 추가하기.
+```java
+class ex{
+  @Test
+  public void update() {
+    dao.deleteAll();
 
+    dao.add(user1);
+    dao.add(user2);
+    dao.add(user3);
 
+    user1.setName("오민규");
+    user1.setPassword("springno6");
+    user1.setLevel(Level.GOLD);
+    user1.setLogin(1000);
+    user1.setRecommend(999);
 
+    dao.update(user1);
 
+    User user1update = dao.get(user1.getId());
+    checkSameUser(user1, user1update);
+    User user2same = dao.get(user2.getId());
+    checkSameUser(user2, user2same);
+  }
+}
+```
 
+## UserService.updateLevels()
+- 사용자 관리 로직은 어디에 두는 것이 좋을까?
+- DAO는 데이터를 어떻게 가져오고 조작할지 다루는 곳이지 비즈니스 로직을 두는 곳이 아님
+- 사용자 관리 비즈니스 로직을 담을 클래스를 추가 -> UserService
 
+### UserService 클래스와 빈 등록
 
+```java
+public class UserService {
+    UserDao userDao;
 
-
+    public void setUserDao(UserDao userDao) {
+        this.userDao = userDao;
+    }
+}
+```
+```java
+class ex{
+  public void upgradeLevels() { //사용자 레벨 관리 기능
+    List<User> users = userDao.getAll();
+    for (User user : users) {
+      Boolean changed = null;
+      if (user.getLevel() == Level.BASIC && user.getLogin() >= 50) {
+        user.setLevel(Level.SILVER);
+        changed = true;
+      } else if (user.getLevel() == Level.SILVER && user.getRecommend() >= 30) {
+        user.setLevel(Level.GOLD);
+        changed = true;
+      } else if (user.getLevel() == Level.GOLD) {
+        changed = false;
+      } else {
+        changed = false;
+      }
+      if (changed) {
+        userDao.update(user);
+      }
+    }
+  }
+}
+```
 
 
 
