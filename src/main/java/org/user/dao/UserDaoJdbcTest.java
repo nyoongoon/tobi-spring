@@ -1,33 +1,35 @@
-package org.user.dao;
+package org.user.userDao;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
-import org.springframework.jdbc.support.SQLErrorCodeSQLExceptionTranslator;
-import org.springframework.jdbc.support.SQLExceptionTranslator;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.user.dao.Level;
+import org.user.dao.UserDaoJdbc;
 import org.user.domain.User;
+import org.user.service.UserService;
 
 import javax.sql.DataSource;
 import java.sql.SQLDataException;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertThrows;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(locations = "/org/user/dao/DaoFactory.java")
 @DirtiesContext
 public class UserDaoJdbcTest {
-
     @Autowired
-    private UserDaoJdbc dao;
+    private UserService userService;
+    @Autowired
+    private UserDaoJdbc userDao;
     @Autowired
     DataSource dataSource;
 
@@ -35,79 +37,85 @@ public class UserDaoJdbcTest {
     private User user2;
     private User user3;
 
+    private List<User> users;
+
 
     @Before
     public void setUp() {
         DataSource dataSource = new SingleConnectionDataSource(
                 "jdbc:mysql://localhost/testdb", "spring", "book", true);
-        dao.setDataSource(dataSource);
+        userDao.setDataSource(dataSource);
 
-        this.user1 = new User("gyumee", "박성철", "springno1", Level.BASIC, 1, 0);
-        this.user2 = new User("leegw700", "이길원", "springno2", Level.SILVER, 55, 10);
-        this.user3 = new User("bumjin", "박범진", "springno3", Level.GOLD, 100, 40);
+        users = Arrays.asList(
+                new User("bumin", "박범진", "p1", Level.BASIC, 49, 0),
+                new User("joytouch", "강명성", "p2", Level.BASIC, 50, 0),
+                new User("erwins", "신승한", "p3", Level.SILVER, 60, 29),
+                new User("mdnite1", "이상호", "p4", Level.SILVER, 60, 30),
+                new User("green", "오민규", "p5", Level.GOLD, 100, 100)
+        );
     }
 
     @Test
     public void addAndGet() throws SQLException {
 
-        dao.deleteAll();
-        assertThat(dao.getCount(), is(0));
+        userDao.deleteAll();
+        assertThat(userDao.getCount(), is(0));
 
-        dao.add(user1);
-        dao.add(user2);
-        assertThat(dao.getCount(), is(2));
+        userDao.add(user1);
+        userDao.add(user2);
+        assertThat(userDao.getCount(), is(2));
 
-        User userget1 = dao.get(user1.getId());
+        User userget1 = userDao.get(user1.getId());
         checkSameUser(userget1, user1);
 
-        User userget2 = dao.get(user2.getId());
+        User userget2 = userDao.get(user2.getId());
         checkSameUser(userget2, user2);
     }
 
     @Test
     public void count() throws SQLException {
 
-        dao.deleteAll();
-        assertThat(dao.getCount(), is(0));
+        userDao.deleteAll();
+        assertThat(userDao.getCount(), is(0));
 
-        dao.add(user1);
-        assertThat(dao.getCount(), is(1));
+        userDao.add(user1);
+        assertThat(userDao.getCount(), is(1));
 
-        dao.add(user2);
-        assertThat(dao.getCount(), is(2));
+        userDao.add(user2);
+        assertThat(userDao.getCount(), is(2));
 
-        dao.add(user3);
-        assertThat(dao.getCount(), is(3));
+        userDao.add(user3);
+        assertThat(userDao.getCount(), is(3));
     }
 
     @Test(expected = SQLDataException.class)
     public void getUserFailuer() throws SQLException {
-        dao.deleteAll();
-        assertThat(dao.getCount(), is(0));
+        userDao.deleteAll();
+        assertThat(userDao.getCount(), is(0));
 
-        dao.get("unknown_id");
+        userDao.get("unknown_id");
     }
 
     @Test
     public void getAll() {
-        dao.deleteAll();
+        userDao.deleteAll();
 
-        List<User> users0 = dao.getAll();
+        List<User> users0 = userDao.getAll();
         assertThat(users0.size(), is(0)); //데이터가 없을 떄는 크기가 0인 오브젝트 리턴
 
-        dao.add(user1);
-        List<User> users1 = dao.getAll();
+        userDao.add(user1);
+        List<User> users1 = userDao.getAll();
         assertThat(users1.size(), is(1));
         checkSameUser(user1, users1.get(0));
 
-        dao.add(user2);
-        List<User> users2 = dao.getAll();
+        userDao.add(user2);
+        List<User> users2 = userDao.getAll();
         assertThat(users2.size(), is(2));
         checkSameUser(user1, users2.get(0));
         checkSameUser(user2, users2.get(1));
 
-        dao.add(user3);
-        List<User> users3 = dao.getAll();
+        userDao.add(user3);
+        List<User> users3 = userDao.getAll();
         assertThat(users3.size(), is(3));
         checkSameUser(user3, users3.get(0));
         checkSameUser(user1, users3.get(1));
@@ -127,11 +135,11 @@ public class UserDaoJdbcTest {
 
     @Test
     public void update() {
-        dao.deleteAll();
+        userDao.deleteAll();
 
-        dao.add(user1);
-        dao.add(user2);
-        dao.add(user3);
+        userDao.add(user1);
+        userDao.add(user2);
+        userDao.add(user3);
 
         user1.setName("오민규");
         user1.setPassword("springno6");
@@ -139,11 +147,49 @@ public class UserDaoJdbcTest {
         user1.setLogin(1000);
         user1.setRecommend(999);
 
-        dao.update(user1);
+        userDao.update(user1);
 
-        User user1update = dao.get(user1.getId());
+        User user1update = userDao.get(user1.getId());
         checkSameUser(user1, user1update);
-        User user2same = dao.get(user2.getId());
+        User user2same = userDao.get(user2.getId());
         checkSameUser(user2, user2same);
+    }
+
+    @Test
+    public void updateLevels() {
+        userDao.deleteAll();
+        for (User user : users) {
+            userDao.add(user);
+        }
+        userService.upgradeLevels();
+
+        checkLevel(users.get(0), Level.BASIC);
+        checkLevel(users.get(1), Level.SILVER);
+        checkLevel(users.get(2), Level.SILVER);
+        checkLevel(users.get(3), Level.GOLD);
+        checkLevel(users.get(4), Level.GOLD);
+    }
+
+    private void checkLevel(User user, Level expectedLevel) {
+        User userUpdate = userDao.get(user.getId());
+        assertThat(userUpdate.getLevel(), is(expectedLevel));
+    }
+
+    @Test
+    public void add(){
+        userDao.deleteAll();
+
+        User userWithLevel = users.get(4); //레벨 이미 지정된 User라면 초기화x
+        User userWithoutLevel = users.get(0); //레벨 비어있으면 초기화
+        userWithoutLevel.setLevel(null);
+
+        userService.add(userWithLevel);
+        userService.add(userWithoutLevel);
+
+        User userWithLevelRead = userDao.get(userWithLevel.getId());
+        User userWithoutLevelRead = userDao.get(userWithoutLevel.getId());
+
+        assertThat(userWithLevelRead.getLevel(), is(userWithLevelRead.getLevel()));
+        assertThat(userWithoutLevelRead.getLevel(), is(Level.BASIC));
     }
 }

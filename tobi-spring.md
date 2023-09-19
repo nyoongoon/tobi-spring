@@ -2870,6 +2870,7 @@ public class UserService {
     }
 }
 ```
+#### updateLevels() 메소드
 ```java
 class ex{
   public void upgradeLevels() { //사용자 레벨 관리 기능
@@ -2894,16 +2895,128 @@ class ex{
   }
 }
 ```
+#### upgradeLevels() 테스트
+- 테스트 픽스처의 개수가 UserDaoTest에서보다 많아졌으니 각각 변수로 등록하는 리스트를 사용
+```java
+class ex{
+        List<User> users;
+        @Before
+        public void setUp() {
+            //..
+            users = Arrays.asList(
+                new User("bumin", "박범진", "p1", Level.BASIC, 49, 0),
+                new User("joytouch", "강명성", "p2", Level.BASIC, 50, 0),
+                new User("erwins", "신승한", "p3", Level.SILVER, 60, 29),
+                new User("mdnite1", "이상호", "p4", Level.SILVER, 60, 30),
+                new User("green", "오민규", "p5", Level.GOLD, 100, 100)
+            );
+        }
+        
+        @Test
+        public void updateLevels() {
+          userDao.deleteAll();
+          for (User user : users) {
+            userDao.add(user);
+          }
+          userService.upgradeLevels();
+      
+          checkLevel(users.get(0), Level.BASIC);
+          checkLevel(users.get(1), Level.SILVER);
+          checkLevel(users.get(2), Level.SILVER);
+          checkLevel(users.get(3), Level.GOLD);
+          checkLevel(users.get(4), Level.GOLD);
+        }
+      
+        private void checkLevel(User user, Level expectedLevel) {
+          User userUpdate = userDao.get(user.getId());
+          assertThat(userUpdate.getLevel(), is(expectedLevel));
+        }
+}
+```
 
+#### UserService.add()
+- 처음 가입하는 사용자는 BASIC레벨로 설정하는 로직 
+- 사용자 관리에 대한 비즈니스 로직을 담고 있는 UserService에 이 로직을 넣기
+##### 테스트 작성
+- User오브젝트에 level 미리 설정되어 있는 경우는 어떻게?
+- -> level이 비어있어면 BASIC, 미리 설정되어 있으면 그대로. 
+```java
+class ex{
+  @Test
+  public void add(){
+    userDao.deleteAll();
 
+    User userWithLevel = users.get(4); //레벨 이미 지정된 User라면 초기화x
+    User userWithoutLevel = users.get(0); //레벨 비어있으면 초기화
+    userWithoutLevel.setLevel(null);
 
+    userService.add(userWithLevel);
+    userService.add(userWithoutLevel);
 
+    User userWithLevelRead = userDao.get(userWithLevel.getId());
+    User userWithoutLevelRead = userDao.get(userWithoutLevel.getId());
 
+    assertThat(userWithLevelRead.getLevel(), is(userWithLevelRead.getLevel()));
+    assertThat(userWithoutLevelRead.getLevel(), is(Level.BASIC));
+  }
+}
+```
+```java
+class ex {
+  public void add(User user) {
+    if (user.getLevel() == null) {
+      user.setLevel(Level.BASIC);
+    }
+    userDao.add(user);
+  }
+}
+```
 
+### 코드 개선
+#### upgradeLevels()의 문제점
+- for 루프속의 if/else 블록들이 읽기 불편함
+- 레벨 변화단계와 업그레이드 조건, 조건 충족시 처리 작업이 섰여있어서 로직 이해하기가 어려움
+- -> 성격이 다른 여러가지 로직이 한데 섞여 있기 때문임
+```java
+class ex{
+  public void upgradeLevels() { //사용자 레벨 관리 기능
+    List<User> users = userDao.getAll();
+    for (User user : users) {
+      Boolean changed = null;
+      // 현재 레벨이 무엇인지 판단하는 로직 && 업그레이드 조건을 담은 로직
+      if (user.getLevel() == Level.BASIC && user.getLogin() >= 50) {
+        user.setLevel(Level.SILVER); // 다음 단계 레벨이 무엇이고 업그레이드를 위한 작업은 어떤 것인지
+        changed = true; //5의 작업을 위한 플래그
+      } else if (user.getLevel() == Level.SILVER && user.getRecommend() >= 30) {
+        user.setLevel(Level.GOLD);
+        changed = true;
+      } else if (user.getLevel() == Level.GOLD) {
+        changed = false;
+      } else {
+        changed = false; // BASIC이 로그인횟수 50 되지 않을 경우도 else, 새로운 레벨이 추가되도 else -> 성격이 다른 경우가 모두 한곳에서 처리되고 있음.
+      }
+      if (changed) {
+        userDao.update(user);
+      }
+    }
+  }
+}
+```
 
-
-
-
-
-
+#### updateLevels() 리팩토링
+- 구체적인 구현에서 외부에 노출할 인처페이스를 분리하는 것처럼
+- -> 레벨을 업그레이드하는 작업의 기본 흐름만 먼저 만들어보기
+```java
+class ex {
+  public void upgradeLevels(){
+    List<User> users = userDao.getAll();
+    for(User user: users){
+      if(canUpgradeLevel(user)){
+        upgradeLevel(user);
+      }
+    }
+  }
+}
+```
+- 모든 사용자 정보를 가져와 한 명씩 업그레이드가 가능한지 확인하고 / 가능하면 업그레이드를 한다. 
 
