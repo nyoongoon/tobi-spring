@@ -2489,6 +2489,7 @@ class ex {
 - -> 런타임 예외를 사용하는 경우 API문서나 레퍼선스 문서를 통해, 메소드를 사용할 때 발생할 수 있는 예외의 종류와 원인, 활용방법 설명해둬야함.
 
 ### 애플리케이션 예외 (체크 예외의 활용 - 비즈니스 로직 예외)
+
 - 런타임 예외 중심의 전략은 이름을 붙이자면 "낙관적인 예외처리"기법이라고 할 수 있음.
 - -> 일단 복구할 수 있는 예외는 없다고 가정하고 예외가 생겨도 어차피 런타임 예외이므로,
 - -> 시스템 레벨에서 알아서 처리해줄것이고, 꼭 필요한 경우는 런타임 예외라도 잡아서 복구하거나 대응해줄 수 있으니
@@ -2497,18 +2498,23 @@ class ex {
 - -> 이런 예외들을 일반적으로 **애플리케이션 예외.**
 
 #### ex) 애플리케이션 예외 상황 예시
+
 - 사용자가 은행 계좌에서 출금하는 기능을 가진 메소드
 - -> 잔고를 확인해서 허용 범위를 체크하고, 중단, 경고의 경우가 포함되어야함.
 
 ##### 예외 메소드 설계 방법 두가지
+
 - 1 정상과, 비정상 처리 경우 각각의 다른 종류의 리턴값 돌려주기
 - 2 예외 상황에서는 비즈니스적 의미를 띈 예외를 던지도록하기
 
 ##### 정상과, 비정상 처리 경우 각각의 다른 종류의 리턴값 돌려주기
+
 - 이러한 경우 메소드를 호출한 쪽에서 반드시 리턴값을 확인해서 이후 작업 흐름을 달리해야함.
 - -> 예외상황에 대한 리턴값을 명확하게 코드화 하고 잘 관리하지 않으면 혼란이 발생
 - -> if문 블록 범벅이 될 수 있음.
+
 ##### 예외 상황에서는 비즈니스적 의미를 띈 예외를 던지도록하기 -> 체크예외로 선언
+
 - 잔고부족인 경우 InsufficientBalanceException 등을 던지기.
 - -> 예외 상황을 처리하는 catch 블록을 메소드 호출 직후 둘 필요는 없음
 - -> 정상적인 흐름을 따르지만 예외가 발생할 수 있는 코드를 try 불록안에 깔끔하게 정리해두고,
@@ -2534,45 +2540,55 @@ class ex {
 }
 ```
 
-
 ### SQLException은 어떻게 됐나?
+
 - SQLException의 99%상황은 복구 불가능한 상황
 - ex) SQL 문법이 틀렸거나, 제약조건을 위반했거나, DB 서버가 다운됐거나, 네트워크가 불안정하거나, DB커넥션 풀이 꽉차거나..
 - -> 필요없는 기계적 throws 선언 방치 말고 언체크/런테임 예외로 전환
-- -> 스프링 JdbcTemplate은 이 예외처리 전략을 따르고 있음. 
+- -> 스프링 JdbcTemplate은 이 예외처리 전략을 따르고 있음.
 - -> JdbcTEmplate 템플릿과 콜백 안에서 발생하는 모든 SQLException을 런타임 예외인 DataAccessException으로 포장해서 던져줌.
 - -> 꼭 **필요한 경우만 런타임 예외인 DataAccessException을 잡아서 처리**하면 되고 나머지는 무시가능.
+
 ```
 public int update(final String sql) throws DataAccessException { ... }
 ```
-- -> throws로 선언되어 있긴 하지만, DataAccessException이 런타임 예외이므로 update()를 사용하는 메소드에서 이를 잡거나 던질 의무가 없음 
 
+- -> throws로 선언되어 있긴 하지만, DataAccessException이 런타임 예외이므로 update()를 사용하는 메소드에서 이를 잡거나 던질 의무가 없음
 
-## 예외 전환 
+## 예외 전환
+
 - 예외 전환의 목적은 두 가지
 - -> 1. 굳이 필요하지 않은 catch/throws를 줄여주는 것.
 - -> 2. 다른 하나는 로우레벨의 예외를 좀 더 의미있고 추상화된 예외로 바꿔서 던지는 것.
-### ex) JdbcTemplate의 DataAccessException
-- 런타임 예외로 SQLException을 포장해주는 역할 -> SQLExcepion에 대해 애플리케이션 레벨에서는 신경 쓰지 않도록 해줌
-- 또한, SQLException으로 다루기 힘든 상세한 예외정보를 의미있고 일관성 있는 예외로 전환해서 추상화해주려는 용도도 있음. 
 
-### JDBC의 한계 
+### ex) JdbcTemplate의 DataAccessException
+
+- 런타임 예외로 SQLException을 포장해주는 역할 -> SQLExcepion에 대해 애플리케이션 레벨에서는 신경 쓰지 않도록 해줌
+- 또한, SQLException으로 다루기 힘든 상세한 예외정보를 의미있고 일관성 있는 예외로 전환해서 추상화해주려는 용도도 있음.
+
+### JDBC의 한계
+
 - 현실적으로 db를 자유롭게 바꾸어 사용하는 DB 프로그램을 작성하는데에는 두가지 걸림돌 있음
+
 #### 비표준 SQL
+
 - 첫째문제는 JDBC 코드에서 사용하는 SQL.
-- 대부분의 DB는 표준을 따르지 않는 비표준 문법과 기능도 제공. 
+- 대부분의 DB는 표준을 따르지 않는 비표준 문법과 기능도 제공.
+
 #### 호환성 없는 SQLEception의 DB 에러 정보
+
 - 문제는 DB마다 SQL만 다른 것이 아니라, 에러의 종류와 원인도 제각각이라는 점.
-- -> 그래서 JDBC는 데이터 처리 중 발생하는 다양한 예외를 그냥 SQLException 하나에 담아버림. 
-- -> JDBC API는 이 SQLException 하나만 던지도록 설계되어 있음. 
+- -> 그래서 JDBC는 데이터 처리 중 발생하는 다양한 예외를 그냥 SQLException 하나에 담아버림.
+- -> JDBC API는 이 SQLException 하나만 던지도록 설계되어 있음.
 - -> 그래서 SQLException은 예외가 발생했을 떄의 DB 상태를 담은 SQL 상태정보를 부가적으로 제공
 - -> getSQLState() 메소드로 예외 상황에 대한 상태정보를 가져올 수 있음
-- -> DB 별로 달라지는 에러코드를 대신할 수 있도록, Open Group의 XOPEN SQL 스펙에 정의된 SQL 상태코드를 따름. 
-- -> 문제는 DB의 JDBC 드라이버에서 SQLException을 담을 상태코드를 정확하게 만들어주지 않음 
+- -> DB 별로 달라지는 에러코드를 대신할 수 있도록, Open Group의 XOPEN SQL 스펙에 정의된 SQL 상태코드를 따름.
+- -> 문제는 DB의 JDBC 드라이버에서 SQLException을 담을 상태코드를 정확하게 만들어주지 않음
 - -> 호환성 없는 에러코드와 표준을 잘 따르지 않은 상태코드를 가진 SQLException으로 DB에 독립적인 유연한 코드 작성하는 것은 불가능
 
 ### DB 에러코드 매핑을 통한 전환
-- DB 종류에 상관없이 동일한 상황에서 일관된 예외를 전달받을 수 있다면 효과적인 대응이 가능 
+
+- DB 종류에 상관없이 동일한 상황에서 일관된 예외를 전달받을 수 있다면 효과적인 대응이 가능
 - 스프링은 **DataAccessException**이라는 SQLException을 대체할 수 있는 런타입 예외를 정의하고 있을 뿐 아니라
 - **DataAccessException의 서브클래스**로 세분화된 예외 클래스들을 정의하고 있음
 - BadSqlGrammarException : SQL 문법 때문에 발생하는 에러
@@ -2581,85 +2597,106 @@ public int update(final String sql) throws DataAccessException { ... }
 - DuplicatedKeyException : 중복키 때문에 발생한 경우
 - -> 스프링은 DB별로 에러코드를 분류해서 스프링이 정의한 예외 클래스와 매필해놓은 에러 코드 매핑 정보 테이블을 만들어주고 이를 이용
 
-#### DataAccessException  
+#### DataAccessException
+
 - JdbcTemplate은 SQLException을 단지 런타임 예외인 DataAccessException으로 포장하는 것이 아니라
 - -> DB의 에러 코드를 DataAccessException 계층구조의 클래스 중 하나로 매핑시켜줌.
 - -> DB가 달라져도 같은 종류의 에러라면 동일한 예외를 받을 수 있음
+
 ```java
-class ex{
-    public void add() throws DuplicateKeyException{
+class ex {
+    public void add() throws DuplicateKeyException {
         //JdbcTEmplate을 이용해 User를 add하는 코드
     }
 }
 ```
+
 - -> JdbcTemplate은 체크 예외인 SQLException을 런타임 예외인 DataAccessException 계층구조의 예외로 포장해주기 때문에
 - -> add()에 예외 포장을 의한 코드가 필요 없음
 - -> add() 메소드를 사용하는 쪽에서 중복키 상황에 대한 대응이 필요한 경우 참고할 수 있도록
 - -> **DuplicateKeyException을 선택적(런타임예외인DataAccessException의 서브 클래스)**으로 메소드 선언에 넣어주면 편리
 
-### DAO 인터페이스와 DataAccessException 계층 구조 
+### DAO 인터페이스와 DataAccessException 계층 구조
+
 - DataAccessException은 의미가 같은 예외라면 데이터 엑세스 기술의 종류와 상관없이 일관된 예외가 발생하도록 만들어줌.
 
 #### DAO 인터페이스와 구현의 분리
+
 - DAO를 따로 만들어서 사용하는 이유 두가지
 - 1 데이터 엑세스 로직을 담은 코드를 성격이 다른 코드에서 분리해놓기 위해
-- 2 분리된 DAO는 전략패턴을 적용해 구현 방법을 변경해서 사용할 수 있게 만들기 위해서 
+- 2 분리된 DAO는 전략패턴을 적용해 구현 방법을 변경해서 사용할 수 있게 만들기 위해서
 - -> DAO의 사용 기술과 구현 코드는 전략패턴과 DI를 통해서 DAO를 사용하는 클라이언트에게 감출 수 있지만
 - -> 메소드 선언에 나타나는 예외정보가 문제가 될 수 있음
+
 ```java
-public interface UserDao{
+public interface UserDao {
     public void add(User user); // 이렇게 선언하는 것이 가능?
 }
 ```
+
 - UserDao의 인터페이스르 분리해서 기술에 독립적인 인터페이스로 만들려면 위처럼 정의해야함
 - 하지만 DAO에서 사용하는 데이터 엑세스 기술의 API가 예외를 던지기 떄문에 위 같은 메소드 선언은 사용할 수 없음.
 - 만약 JDBC API를 사용하는 UserDao 구현 클래스의 add()메소드라면 SQLExceptino을 던질 것
 - -> 인터페이스의 메소드 선언에 없는 예외를 구현 클래스 메소드의 throws에 넣을 수 없음
+
 ```java
-public interface UserDao{
-  public void add(User user) throws SQLException;
+public interface UserDao {
+    public void add(User user) throws SQLException;
 }
 ```
+
 - 그러나 위처럼 정의한 메소드는 JDBC가 아닌 기술로 DAO를 구현하면 사용할 수가 없음. 기술들이 자신만의 독자적인 예외를 던지기 떄문
+
 ```
 public void add(User user) throws PersistentException; //JPA
 public void add(User user) throws HibernateException; //Hibernate
 public void add(User user) throws JdoException; //JDO
 ```
+
 - -> 구현 기술마다 던지는 예외가 다르므로 기술에 완전히 독립적으로 만들 수 없는 상황
-- -> 단지 인터페이스로 추상화하고 일부 기술에서 발생하는 체크예외를 런타임 예외로 전환하는 것만으로는 불충분. 
+- -> 단지 인터페이스로 추상화하고 일부 기술에서 발생하는 체크예외를 런타임 예외로 전환하는 것만으로는 불충분.
 
 #### 데이터 엑세스 예외 추상화와 DataAccessException 계층구조
+
 - 그래서 스프링은 자바의 다양한 데이터 엑세스 기술을 사용할 때 발생하는 예외들을 추상화해서 DataAccessException 계층구조안에 정리해놓음
-- 앞서 JdbcTemplate에서 보았떤 DataAccessException 클래스들이 단지 SQLException을 전환하는 용도로만 쓰이는 건 아님. 
+- 앞서 JdbcTemplate에서 보았떤 DataAccessException 클래스들이 단지 SQLException을 전환하는 용도로만 쓰이는 건 아님.
 - **DataAccessException**은 자바의 주요 **데이터 엑세스 기술에서 발생할 수 있는 대부분 예외를 추상화**하고 있음.
 - InvalidDataAccessResourceUsageException : 엑세스 기술을 부정확하게 사용
 - OjbectOptimisticLockingFailureException : ORM에서 낙관적인 락킹 발생 시
 - ex) 직접 낙관적인 락킹 기능을 구현했다고 하면 슈퍼클래스인 OptimisticLockingFailureException을 상속해서 정의할 수도 있음
-![](/img/img_9.png)
+  ![](/img/img_9.png)
 
 - IncorrectResultSizeDataAccessException : 쿼리실행결과의 사이즈 다를떄 -> queryForObject는 서브클래스인 EmptyResultDataAccessException을 발생
 
+### 기술에 독립적인 UserDao 만들기
 
-### 기술에 독립적인 UserDao 만들기 
 #### 인터페이스 적용
+
 - UserDao 클래스를 인터페이스와 구현으로 분리해보기
+
 ```java
 public interface UserDao {
     void add(User user);
+
     User get(String id);
+
     List<User> getAll();
+
     void deleteAll();
+
     int getCount();
 }
 ```
+
 - 의존 관계 수정
+
 ```java
+
 @Configuration
 public class DaoFactory {
     //..
     @Bean
-    public UserDaoJdbc userDao(){ //빈의 이름은 클래스 이름이 아니라 구현 클래스의 이름을 따름
+    public UserDaoJdbc userDao() { //빈의 이름은 클래스 이름이 아니라 구현 클래스의 이름을 따름
         UserDaoJdbc userDaoJdbc = new UserDaoJdbc();
         userDaoJdbc.setDataSource(dataSource());
         return userDaoJdbc;
@@ -2668,33 +2705,39 @@ public class DaoFactory {
 ```
 
 #### DataAccessException 활용 시 주의사항
+
 - DuplicateKeyException 같은 경우 아직까지는 JDBC를 이용하는 경우에만 발생함.
 - -> 따라서, DAO에서 사용하는 기술의 종류와 상관없이 동일한 예외를 얻고 싶다면 DuplicatedUserIdException 처럼 직접 예외를 정의해두고,
-- -> 각 DAO의 add() 메소드에서 좀 더 상세한 예외 전환을 해줄 필요가 있다. 
+- -> 각 DAO의 add() 메소드에서 좀 더 상세한 예외 전환을 해줄 필요가 있다.
 - -> SQLException을 직접 해석해서 DataAccessException으로 변환해주는 코드의 사용법 살펴보기...
+
 ##### SQLExceptionTranslator
+
 - DB에러 코드를 이용하여, SQLExceptionTranslator 인터페이스를 구현한 클래스 중에서
 - -> SQLErrorCodeSQLExceptionTranslator를 사용하기.
 - -> 에러코드 변환에 필요한 DB의 종류를 알아내기 위해 현재 연결된 DataSource를 필요로함.
-```java
-class ex{
-  @Test
-  public void sqlExceptionTranslate() {
-    dao.deleteAll();
-    try {
-      dao.add(user1);
-      dao.add(user1);
-    } catch (DuplicateKeyException ex) {
-      SQLException sqlEx = (SQLException) ex.getRootCause();
-      SQLExceptionTranslator set =
-              new SQLErrorCodeSQLExceptionTranslator(this.dataSource);
 
-      assertThat(set.translate(null, null, sqlEx), is(DuplicateKeyException.class))
+```java
+class ex {
+    @Test
+    public void sqlExceptionTranslate() {
+        dao.deleteAll();
+        try {
+            dao.add(user1);
+            dao.add(user1);
+        } catch (DuplicateKeyException ex) {
+            SQLException sqlEx = (SQLException) ex.getRootCause();
+            SQLExceptionTranslator set =
+                    new SQLErrorCodeSQLExceptionTranslator(this.dataSource);
+
+            assertThat(set.translate(null, null, sqlEx), is(DuplicateKeyException.class))
+        }
     }
-  }
 }
 ```
+
 ## 정리
+
 - 예외를 잡아서 아무런 조취를 취하지 않거나 의미없는 thorws 선언을 남발하는 것은 위험
 - 예외는 복구하거나 예외처리 오브젝트로 의도적으로 전달하거나 적절한 예외로 전환해야함
 - 예외 전환 : 좀 더 의미있는 예외로 변경 or 불필요한 catch/throws를 피하기 위해 런타임 예외로 포장
@@ -2705,11 +2748,12 @@ class ex{
 - 스프링은 DataAccessException을 통해 DB에 독립적으로 적용 가능한 추상화된 런타임예외 계층을 제공함
 - DAO를 데이터 엑세스 기술에서 독립시키려면 인터페이스 도입과 런타임 예외 전환, 기술에 독립적인 추상화된 예외로 전환이 필요함.
 
-
 # 5장 서비스 추상화
+
 - DAO에 트랜잭션을 적용해보면서 스프링이 어떻게 성격이 비슷한 여러 종류의 기술을 추상화하고 일관된 방법으로 사용할 수 있도록 지원하는지 살펴보기
 
 ## 사용자 레벨 관리 기능 추가
+
 ```
 - 구현해야할 비즈니스 로직
 - 사용자의 레벨은 BASIC, SIVER, GOLD 세가지 중 하나
@@ -2720,34 +2764,41 @@ class ex{
 ```
 
 ### 필드 추가
+
 #### LEVEL 이늄
+
 - 먼저 User 클래스에 사용자의 레벨을 저장할 필드를 추가
-- User에 추가할 프로퍼티 타입이 숫자면 타입이 안전하지 않아서 위험할 수 있음. 
+- User에 추가할 프로퍼티 타입이 숫자면 타입이 안전하지 않아서 위험할 수 있음.
+
 ```java
 // 예시 안전하지 않은 타입 예시
 public class User {
-  private static final int BASIC = 1;
-  private static final int SILVER = 2;
-  private static final int GOLD = 3;
+    private static final int BASIC = 1;
+    private static final int SILVER = 2;
+    private static final int GOLD = 3;
 
-  int level;
-  //..
-  
-  public void setLevel(int level) {
-    this.level = level;
-  }
+    int level;
+    //..
+
+    public void setLevel(int level) {
+        this.level = level;
+    }
 }
 ```
+
 ```
 // 사용자 레벨 상수 값을 이용한 코드
 if(user1.getLevel() == User.BASIC){
   user1.getLevel(User.SILVER);
 }
 ```
+
 - -> 문제는 level의 타입이 int 이기 떄문에 다음처럼 다른 종류의 정보를 넣는 실수를 해도 컴파일러가 체크해주지 못함!
+
 ```
 user1.setLevel(1000);
 ```
+
 - -> 따라서 숫자타입을 직접 사용하는 것보다 이늄을 이용하는게 안전하고 편리함!
 
 ```java
@@ -2759,102 +2810,113 @@ public enum Level {
         this.value = value;
     }
 
-    public int intValue(){
+    public int intValue() {
         return value;
     }
 
-    public static Level valueOf(int value){
-        switch (value){
-            case 1 : return BASIC;
-            case 2 : return SILVER;
-            case 3 : return GOLD;
-            default: throw new AssertionError("Unknown value: " + value);
+    public static Level valueOf(int value) {
+        switch (value) {
+            case 1:
+                return BASIC;
+            case 2:
+                return SILVER;
+            case 3:
+                return GOLD;
+            default:
+                throw new AssertionError("Unknown value: " + value);
         }
     }
 }
 ```
+
 ```java
 // User필드에 Enum 추가
 public class User {
-  Level level;
-  int login;
-  int recommend;
+    Level level;
+    int login;
+    int recommend;
 
-  //...
-  public Level getLevel() {
-    return level;
-  }
+    //...
+    public Level getLevel() {
+        return level;
+    }
 
-  public void setLevel(Level level) {
-    this.level = level;
-  }
+    public void setLevel(Level level) {
+        this.level = level;
+    }
 }
 ```
 
 #### 사용자 수정 기능 추가
-- 수정할 정보가 담긴 User오브젝트를 전달하면 id를 참고해서 사용자를 찾아 
+
+- 수정할 정보가 담긴 User오브젝트를 전달하면 id를 참고해서 사용자를 찾아
 - 필드 정보를 UPDATE문을 이용해 모두 변경해주는 메소드 만들기
 
-
 #### 수정 기능 테스트 추가
-```java
-class ex{
-  @Test
-  public void update(){
-    dao.deleteAll();
-    dao.add(user1);
-    user1.setName("오민규");
-    user1.setPassword("springno6");
-    user1.setLevel(Level.GOLD);
-    user1.setLogin(1000);
-    user1.getRecommend(999);
-    dao.update(user1);
 
-    User user1update = dao.get(user1.getId());
-    checkSameUser(user1, user1update);
-  }
-}
-```
 ```java
-class ex{
-  public void update(User user) {
-    this.jdbcTemplate.update(
-            "update users set name = ?, password = ?, level = ?, login = ? "+
-                    "recommend = ? where id =? ", user.getName(), user.getPassword(),
-            user.getLevel().intValue(), user.getLogin(), user.getRecommend(),
-            user.getId());
-  }
+class ex {
+    @Test
+    public void update() {
+        dao.deleteAll();
+        dao.add(user1);
+        user1.setName("오민규");
+        user1.setPassword("springno6");
+        user1.setLevel(Level.GOLD);
+        user1.setLogin(1000);
+        user1.getRecommend(999);
+        dao.update(user1);
+
+        User user1update = dao.get(user1.getId());
+        checkSameUser(user1, user1update);
+    }
 }
 ```
+
+```java
+class ex {
+    public void update(User user) {
+        this.jdbcTemplate.update(
+                "update users set name = ?, password = ?, level = ?, login = ? " +
+                        "recommend = ? where id =? ", user.getName(), user.getPassword(),
+                user.getLevel().intValue(), user.getLogin(), user.getRecommend(),
+                user.getId());
+    }
+}
+```
+
 #### 수정 테스트 보완
+
 - update문이 실행되어도 정말 값이 수정되었는지 확인하는 로직 추가하기.
+
 ```java
-class ex{
-  @Test
-  public void update() {
-    dao.deleteAll();
+class ex {
+    @Test
+    public void update() {
+        dao.deleteAll();
 
-    dao.add(user1);
-    dao.add(user2);
-    dao.add(user3);
+        dao.add(user1);
+        dao.add(user2);
+        dao.add(user3);
 
-    user1.setName("오민규");
-    user1.setPassword("springno6");
-    user1.setLevel(Level.GOLD);
-    user1.setLogin(1000);
-    user1.setRecommend(999);
+        user1.setName("오민규");
+        user1.setPassword("springno6");
+        user1.setLevel(Level.GOLD);
+        user1.setLogin(1000);
+        user1.setRecommend(999);
 
-    dao.update(user1);
+        dao.update(user1);
 
-    User user1update = dao.get(user1.getId());
-    checkSameUser(user1, user1update);
-    User user2same = dao.get(user2.getId());
-    checkSameUser(user2, user2same);
-  }
+        User user1update = dao.get(user1.getId());
+        checkSameUser(user1, user1update);
+        User user2same = dao.get(user2.getId());
+        checkSameUser(user2, user2same);
+    }
 }
 ```
 
 ## UserService.updateLevels()
+
 - 사용자 관리 로직은 어디에 두는 것이 좋을까?
 - DAO는 데이터를 어떻게 가져오고 조작할지 다루는 곳이지 비즈니스 로직을 두는 곳이 아님
 - 사용자 관리 비즈니스 로직을 담을 클래스를 추가 -> UserService
@@ -2870,153 +2932,320 @@ public class UserService {
     }
 }
 ```
+
 #### updateLevels() 메소드
+
 ```java
-class ex{
-  public void upgradeLevels() { //사용자 레벨 관리 기능
-    List<User> users = userDao.getAll();
-    for (User user : users) {
-      Boolean changed = null;
-      if (user.getLevel() == Level.BASIC && user.getLogin() >= 50) {
-        user.setLevel(Level.SILVER);
-        changed = true;
-      } else if (user.getLevel() == Level.SILVER && user.getRecommend() >= 30) {
-        user.setLevel(Level.GOLD);
-        changed = true;
-      } else if (user.getLevel() == Level.GOLD) {
-        changed = false;
-      } else {
-        changed = false;
-      }
-      if (changed) {
-        userDao.update(user);
-      }
+class ex {
+    public void upgradeLevels() { //사용자 레벨 관리 기능
+        List<User> users = userDao.getAll();
+        for (User user : users) {
+            Boolean changed = null;
+            if (user.getLevel() == Level.BASIC && user.getLogin() >= 50) {
+                user.setLevel(Level.SILVER);
+                changed = true;
+            } else if (user.getLevel() == Level.SILVER && user.getRecommend() >= 30) {
+                user.setLevel(Level.GOLD);
+                changed = true;
+            } else if (user.getLevel() == Level.GOLD) {
+                changed = false;
+            } else {
+                changed = false;
+            }
+            if (changed) {
+                userDao.update(user);
+            }
+        }
     }
-  }
 }
 ```
+
 #### upgradeLevels() 테스트
+
 - 테스트 픽스처의 개수가 UserDaoTest에서보다 많아졌으니 각각 변수로 등록하는 리스트를 사용
+
 ```java
-class ex{
-        List<User> users;
-        @Before
-        public void setUp() {
-            //..
-            users = Arrays.asList(
+class ex {
+    List<User> users;
+
+    @Before
+    public void setUp() {
+        //..
+        users = Arrays.asList(
                 new User("bumin", "박범진", "p1", Level.BASIC, 49, 0),
                 new User("joytouch", "강명성", "p2", Level.BASIC, 50, 0),
                 new User("erwins", "신승한", "p3", Level.SILVER, 60, 29),
                 new User("mdnite1", "이상호", "p4", Level.SILVER, 60, 30),
                 new User("green", "오민규", "p5", Level.GOLD, 100, 100)
-            );
-        }
-        
-        @Test
-        public void updateLevels() {
-          userDao.deleteAll();
-          for (User user : users) {
+        );
+    }
+
+    @Test
+    public void updateLevels() {
+        userDao.deleteAll();
+        for (User user : users) {
             userDao.add(user);
-          }
-          userService.upgradeLevels();
-      
-          checkLevel(users.get(0), Level.BASIC);
-          checkLevel(users.get(1), Level.SILVER);
-          checkLevel(users.get(2), Level.SILVER);
-          checkLevel(users.get(3), Level.GOLD);
-          checkLevel(users.get(4), Level.GOLD);
         }
-      
-        private void checkLevel(User user, Level expectedLevel) {
-          User userUpdate = userDao.get(user.getId());
-          assertThat(userUpdate.getLevel(), is(expectedLevel));
-        }
+        userService.upgradeLevels();
+
+        checkLevel(users.get(0), Level.BASIC);
+        checkLevel(users.get(1), Level.SILVER);
+        checkLevel(users.get(2), Level.SILVER);
+        checkLevel(users.get(3), Level.GOLD);
+        checkLevel(users.get(4), Level.GOLD);
+    }
+
+    private void checkLevel(User user, Level expectedLevel) {
+        User userUpdate = userDao.get(user.getId());
+        assertThat(userUpdate.getLevel(), is(expectedLevel));
+    }
 }
 ```
 
 #### UserService.add()
-- 처음 가입하는 사용자는 BASIC레벨로 설정하는 로직 
+
+- 처음 가입하는 사용자는 BASIC레벨로 설정하는 로직
 - 사용자 관리에 대한 비즈니스 로직을 담고 있는 UserService에 이 로직을 넣기
+
 ##### 테스트 작성
+
 - User오브젝트에 level 미리 설정되어 있는 경우는 어떻게?
-- -> level이 비어있어면 BASIC, 미리 설정되어 있으면 그대로. 
-```java
-class ex{
-  @Test
-  public void add(){
-    userDao.deleteAll();
+- -> level이 비어있어면 BASIC, 미리 설정되어 있으면 그대로.
 
-    User userWithLevel = users.get(4); //레벨 이미 지정된 User라면 초기화x
-    User userWithoutLevel = users.get(0); //레벨 비어있으면 초기화
-    userWithoutLevel.setLevel(null);
-
-    userService.add(userWithLevel);
-    userService.add(userWithoutLevel);
-
-    User userWithLevelRead = userDao.get(userWithLevel.getId());
-    User userWithoutLevelRead = userDao.get(userWithoutLevel.getId());
-
-    assertThat(userWithLevelRead.getLevel(), is(userWithLevelRead.getLevel()));
-    assertThat(userWithoutLevelRead.getLevel(), is(Level.BASIC));
-  }
-}
-```
 ```java
 class ex {
-  public void add(User user) {
-    if (user.getLevel() == null) {
-      user.setLevel(Level.BASIC);
+    @Test
+    public void add() {
+        userDao.deleteAll();
+
+        User userWithLevel = users.get(4); //레벨 이미 지정된 User라면 초기화x
+        User userWithoutLevel = users.get(0); //레벨 비어있으면 초기화
+        userWithoutLevel.setLevel(null);
+
+        userService.add(userWithLevel);
+        userService.add(userWithoutLevel);
+
+        User userWithLevelRead = userDao.get(userWithLevel.getId());
+        User userWithoutLevelRead = userDao.get(userWithoutLevel.getId());
+
+        assertThat(userWithLevelRead.getLevel(), is(userWithLevelRead.getLevel()));
+        assertThat(userWithoutLevelRead.getLevel(), is(Level.BASIC));
     }
-    userDao.add(user);
-  }
+}
+```
+
+```java
+class ex {
+    public void add(User user) {
+        if (user.getLevel() == null) {
+            user.setLevel(Level.BASIC);
+        }
+        userDao.add(user);
+    }
 }
 ```
 
 ### 코드 개선
+
 #### upgradeLevels()의 문제점
+
 - for 루프속의 if/else 블록들이 읽기 불편함
 - 레벨 변화단계와 업그레이드 조건, 조건 충족시 처리 작업이 섰여있어서 로직 이해하기가 어려움
 - -> 성격이 다른 여러가지 로직이 한데 섞여 있기 때문임
+
 ```java
-class ex{
-  public void upgradeLevels() { //사용자 레벨 관리 기능
-    List<User> users = userDao.getAll();
-    for (User user : users) {
-      Boolean changed = null;
-      // 현재 레벨이 무엇인지 판단하는 로직 && 업그레이드 조건을 담은 로직
-      if (user.getLevel() == Level.BASIC && user.getLogin() >= 50) {
-        user.setLevel(Level.SILVER); // 다음 단계 레벨이 무엇이고 업그레이드를 위한 작업은 어떤 것인지
-        changed = true; //5의 작업을 위한 플래그
-      } else if (user.getLevel() == Level.SILVER && user.getRecommend() >= 30) {
-        user.setLevel(Level.GOLD);
-        changed = true;
-      } else if (user.getLevel() == Level.GOLD) {
-        changed = false;
-      } else {
-        changed = false; // BASIC이 로그인횟수 50 되지 않을 경우도 else, 새로운 레벨이 추가되도 else -> 성격이 다른 경우가 모두 한곳에서 처리되고 있음.
-      }
-      if (changed) {
-        userDao.update(user);
-      }
+class ex {
+    public void upgradeLevels() { //사용자 레벨 관리 기능
+        List<User> users = userDao.getAll();
+        for (User user : users) {
+            Boolean changed = null;
+            // 현재 레벨이 무엇인지 판단하는 로직 && 업그레이드 조건을 담은 로직
+            if (user.getLevel() == Level.BASIC && user.getLogin() >= 50) {
+                user.setLevel(Level.SILVER); // 다음 단계 레벨이 무엇이고 업그레이드를 위한 작업은 어떤 것인지
+                changed = true; //5의 작업을 위한 플래그
+            } else if (user.getLevel() == Level.SILVER && user.getRecommend() >= 30) {
+                user.setLevel(Level.GOLD);
+                changed = true;
+            } else if (user.getLevel() == Level.GOLD) {
+                changed = false;
+            } else {
+                changed = false; // BASIC이 로그인횟수 50 되지 않을 경우도 else, 새로운 레벨이 추가되도 else -> 성격이 다른 경우가 모두 한곳에서 처리되고 있음.
+            }
+            if (changed) {
+                userDao.update(user);
+            }
+        }
     }
-  }
 }
 ```
 
 #### updateLevels() 리팩토링
+
 - 구체적인 구현에서 외부에 노출할 인처페이스를 분리하는 것처럼
 - -> 레벨을 업그레이드하는 작업의 기본 흐름만 먼저 만들어보기
+
 ```java
 class ex {
-  public void upgradeLevels(){
-    List<User> users = userDao.getAll();
-    for(User user: users){
-      if(canUpgradeLevel(user)){
-        upgradeLevel(user);
-      }
+    public void upgradeLevels() {
+        List<User> users = userDao.getAll();
+        for (User user : users) {
+            if (canUpgradeLevel(user)) {
+                upgradeLevel(user);
+            }
+        }
     }
-  }
 }
 ```
-- 모든 사용자 정보를 가져와 한 명씩 업그레이드가 가능한지 확인하고 / 가능하면 업그레이드를 한다. 
+
+- 모든 사용자 정보를 가져와 한 명씩 업그레이드가 가능한지 확인하고 / 가능하면 업그레이드를 한다.
+
+```java
+class ex {
+    private boolean canUpgradeLevel(User user) {
+        Level currentLevel = user.getLevel();
+        switch (currentLevel) {
+            case BASIC:
+                return (user.getLogin() >= 50);
+            case SILVER:
+                return (user.getRecommend() >= 30);
+            case GOLD:
+                return false;
+            default:
+                throw new IllegalArgumentException("Unkown Level: " + currentLevel);
+        }
+    }
+
+    private void upgradeLevel(User user) { // 덜 클린한 상황
+        if (user.getLevel() == Level.BASIC) {
+            user.setLevel(Level.SILVER);
+        } else if (user.getLevel() == Level.SILVER) {
+            user.setLevel(Level.GOLD);
+        }
+        userDao.update(user);
+    }
+}
+```
+
+- updateLevel() 리팩토링할 부분
+- -> 다음단계가 무엇인가 하는 로직과 그때 사용자 오브젝트의 level 필드를 변경해준다는 로직이 함께 있는데다, 너무 노골적으로 드러나있음.
+- -> 예와상황도 없어서 다음단계까 없는 GOLD레벨인 사용자를 업그레이드하려고 이 메소드를 호출한다면 아무것도 처리하지 않고 그냥 DAO의 업데이트 메소드만 실행될 것.
+- -> 레벨이 늘어나면 if문도 점점 길어질것..
+
+#### upgradeLevel() 리팩토링
+
+- 먼저 레벨의 순서와 다음 단계의 레벨이 무엇인지 결정하는 일은 Level에게 맡기기(레벨의 순서를 UserSevice에 담아둘 이유가 없음)
+
+```java
+public enum Level {
+    GOLD(3, null), SILVER(2, GOLD), BASIC(1, SILVER);
+
+    //..
+    public Level nextLevel() {
+        return this.next;
+    }
+    //..
+}
+```
+
+- 사용자 정보가 바뀌는 부분을 UserService메소드에서 User로 옮기기.
+- -> User의 내부정보가 변경되는 것은 UserService보다는 User가 다루는 게 적절함.
+
+```java
+class User {
+    //..
+    public void upgradeLevel() {
+        Level nextLevel = this.level.nextLevel();
+        if (nextLevel == null) {
+            throw new IllegalStateException((this.level) + "은 업그레이드가 불가능합니다.");
+        } else {
+            this.level = nextLevel;
+        }
+    }
+}
+```
+
+- 추후, 업그레이드 시 기타 정보도 변경이 필요해지면 필드를 추가하고 upgradeLevel()에서 처리하면 됨.
+
+```java
+class UserService {
+    //..
+    private void upgradeLevel(User user) {
+        user.upgradeLevel();
+        userDao.update(user);
+    }
+}
+```
+
+#### UserServiceTest
+
+```java
+class UserServiceTest {
+    @Test
+    public void upgradeLevel() {
+        Level[] levels = Level.values();
+        for (Level level : levels) {
+            if (level.nextLevel() == null) continue;
+            user.setLevel(level);
+            user.upgradeLevel();
+            assertThat(user.getLevel(), is(level.nextLevel()));
+        }
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void cannotUpgradeLevel() {
+        Level[] levels = Level.values();
+        for (Level level : levels) {
+            if (level.nextLevel() != null) continue; //null 찾기
+            user.setLevel(level);
+            user.upgradeLevel();
+        }
+    }
+}
+```
+
+#### UserServiceTest 개선
+
+```java
+class ex {
+    @Test
+    public void updateLevels() {
+        userDao.deleteAll();
+        for (User user : users) {
+            userDao.add(user);
+        }
+        userService.upgradeLevels();
+
+//        checkLevel(users.get(0), Level.BASIC);
+//        checkLevel(users.get(1), Level.SILVER);
+//        checkLevel(users.get(2), Level.SILVER);
+//        checkLevel(users.get(3), Level.GOLD);
+//        checkLevel(users.get(4), Level.GOLD);
+        checkLevelUpgraded(users.get(0), false);
+        checkLevelUpgraded(users.get(1), true);
+        checkLevelUpgraded(users.get(2), false);
+        checkLevelUpgraded(users.get(3), true);
+        checkLevelUpgraded(users.get(4), false);
+    }
+
+    private void checkLevel(User user, Level expectedLevel) {
+        User userUpdate = userDao.get(user.getId());
+        assertThat(userUpdate.getLevel(), is(expectedLevel));
+    }
+
+    private void checkLevelUpgraded(User user, boolean upgraded) {
+        User userUpdate = userDao.get(user.getId());
+        if (upgraded) {
+            assertThat(userUpdate.getLevel(), is(user.getLevel().nextLevel()));
+        } else {
+            assertThat(userUpdate.getLevel(), is(user.getLevel()));
+        }
+    }
+    //..
+}
+```
+
+- 기존 upgradeLevels() 테스트 코드는 테스트 로직이 분명하게 드러나지 않은 것이 단점
+- checkLevel()을 호출하면서 파라미터로 Level이늄을 하나 전달하는데, 테스트 코드만 봐서는 그것이 업그레이드된 경우를 테스트하려는 것인지 쉽게 파악이 안됨.
+- -> 개선된 코드에서는 각 사용자에 해대 업그레이드를 확인하려는 것인지 boolean으로 나타나 있음.
+- -> 또 업그레이드 됐을 떄 어떤 레벨인지는 Level이늄의 nextLevel()을 호출해보면 됨
 

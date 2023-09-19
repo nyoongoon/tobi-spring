@@ -60,7 +60,12 @@ public class UserService {
             case GOLD:
                 return false;
             default:
+                throw new IllegalArgumentException("Unkown Level: " + currentLevel);
         }
     }
 
+    private void upgradeLevel(User user){
+        user.upgradeLevel();
+        userDao.update(user);
+    }
 }

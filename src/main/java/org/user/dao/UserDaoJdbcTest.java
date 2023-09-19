@@ -1,4 +1,4 @@
-package org.user.userDao;
+package org.user.dao;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -163,11 +163,16 @@ public class UserDaoJdbcTest {
         }
         userService.upgradeLevels();
 
-        checkLevel(users.get(0), Level.BASIC);
-        checkLevel(users.get(1), Level.SILVER);
-        checkLevel(users.get(2), Level.SILVER);
-        checkLevel(users.get(3), Level.GOLD);
-        checkLevel(users.get(4), Level.GOLD);
+//        checkLevel(users.get(0), Level.BASIC);
+//        checkLevel(users.get(1), Level.SILVER);
+//        checkLevel(users.get(2), Level.SILVER);
+//        checkLevel(users.get(3), Level.GOLD);
+//        checkLevel(users.get(4), Level.GOLD);
+        checkLevelUpgraded(users.get(0), false);
+        checkLevelUpgraded(users.get(1), true);
+        checkLevelUpgraded(users.get(2), false);
+        checkLevelUpgraded(users.get(3), true);
+        checkLevelUpgraded(users.get(4), false);
     }
 
     private void checkLevel(User user, Level expectedLevel) {
@@ -175,8 +180,17 @@ public class UserDaoJdbcTest {
         assertThat(userUpdate.getLevel(), is(expectedLevel));
     }
 
+    private void checkLevelUpgraded(User user, boolean upgraded) {
+        User userUpdate = userDao.get(user.getId());
+        if (upgraded) {
+            assertThat(userUpdate.getLevel(), is(user.getLevel().nextLevel()));
+        } else {
+            assertThat(userUpdate.getLevel(), is(user.getLevel()));
+        }
+    }
+
     @Test
-    public void add(){
+    public void add() {
         userDao.deleteAll();
 
         User userWithLevel = users.get(4); //레벨 이미 지정된 User라면 초기화x
@@ -192,4 +206,6 @@ public class UserDaoJdbcTest {
         assertThat(userWithLevelRead.getLevel(), is(userWithLevelRead.getLevel()));
         assertThat(userWithoutLevelRead.getLevel(), is(Level.BASIC));
     }
+
+
 }
