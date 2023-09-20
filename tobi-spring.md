@@ -3249,3 +3249,147 @@ class ex {
 - -> 개선된 코드에서는 각 사용자에 해대 업그레이드를 확인하려는 것인지 boolean으로 나타나 있음.
 - -> 또 업그레이드 됐을 떄 어떤 레벨인지는 Level이늄의 nextLevel()을 호출해보면 됨
 
+#### 애플리케이션 코드와 테스트코드 사이의 중복 제거
+
+```
+case BASIC: return(user.getLogin() >= 50);  //UserService 
+
+new User("joytouch", "강명성", "p2" Level.BASIC, 50, 0) // UserServiceTest -> 50 설정해주는것이 중복.. -> 상수값 처리
+```
+
+- 정수형 상수 선언하기
+
+```java
+public class UserService {
+    public static final int MIN_LOGCOUNT_FOR_SILVER = 50;
+    public static final int MIN_RECCOMEND_FOR_GOLD = 30;
+
+    //..
+    private boolean canUpgradeLevel(User user) {
+        Level currentLevel = user.getLevel();
+        switch (currentLevel) {
+            case BASIC:
+                return (user.getLogin() >= MIN_LOGCOUNT_FOR_SILVER);
+            case SILVER:
+                return (user.getRecommend() >= MIN_RECCOMEND_FOR_GOLD);
+            //..
+        }
+    }
+}
+```
+
+```java
+import static org.user.service.UserService.MIN_LOGCOUNT_FOR_SILVER;
+import static org.user.service.UserService.MIN_RECCOMEND_FOR_GOLD;
+
+//..
+public class UserDaoJdbcTest {
+    @Before
+    public void setUp() {
+        //..
+        users = Arrays.asList(
+                new User("bumin", "박범진", "p1", Level.BASIC, MIN_LOGCOUNT_FOR_SILVER - 1, 0),
+                new User("joytouch", "강명성", "p2", Level.BASIC, MIN_LOGCOUNT_FOR_SILVER, 0),
+                new User("erwins", "신승한", "p3", Level.SILVER, MIN_RECCOMEND_FOR_GOLD - 1, 29),
+                new User("mdnite1", "이상호", "p4", Level.SILVER, MIN_RECCOMEND_FOR_GOLD, 30),
+                new User("green", "오민규", "p5", Level.GOLD, 100, Integer.MAX_VALUE)
+        );
+    }
+    //..
+}
+```
+
+- -> 숫자로만 되어 있는 경우 비즈니스로직을 이해하기 어려웠던 부분이 의도 파악이 가능하게 됨.
+
+#### 유저등급 정책 변경 분리하기
+
+- 레벨을 업그레이드하는 정책을 유연하게 변경할 수 있도록 개선
+- 중요로직인 UserService의 수정을 최소화 하기 위해 정책 분리 -> DI를 통해 정책 주입 -> 정책 인터페이스 만들기
+
+```java
+public interface UserLevelUpgradePolicy {
+    boolean canUpgradeLevel(User user);
+
+    void upgradeLevel(User user);
+}
+```
+
+## 트랜잭션 서비스 추상화
+
+- 정기 사용자 레벨 관리 작업 도중 실패하면?
+
+### 모 아니면 도
+
+- -> 이미 변경된 사용자 레벨은 작업 이전상태 ?
+- -> 아니면 바뀐 채로 남아 있을까?
+
+#### 장애 테스트
+
+- 장애 상황을 일부러 만들 수는 없음
+- -> 장애 발생했을 때 일어나는 현상 중의 하나인 예외가 던져지는 상황을 의도적으로 만들기
+
+#### 테스트용 UserService 대역
+
+- 예외를 강제 발생시키도록 애플리케이션 코드 수정할 수 없으므로
+- -> 테스트용으로 만든 UserService의 대역을 사용하는 방법이 좋음.
+- -> 간단히 UserService를 상속해서 테스트에 필요한 기능을 추가하도록 일부 메소드를 오버라이딩 하는 방법
+- -> 테스트에서만 사용할 클래스라면 테스트 클래스 내부에 스태틱 클래스로 만드는 것이 간편.
+- -> **테스트를 위해 소스를 수정하는것은 지양**해야겠지만
+- -> UserService의 메소드가 private이여서 **최소한으로 protected로 수정**하기
+
+```
+protected void upgradeLevel(User user) {...}
+```
+
+```java
+class UserServiceTest {
+    //..
+    static class TestUserService extends UserService {
+        private String id;
+
+        private TestUserService(String id) {
+            this.id = id;
+        }
+
+        @Override
+        protected void upgradeLevel(User user) {
+            // 지정된 id의 User 오브젝트가 발견되면 예외를 던져서 작업을 강제로 중단.
+            if (user.getId().equals(this.id)) throw TestUserServiceException();
+            super.upgradeLevel(user);
+        }
+    }
+
+    // 테스트 목적을 띤 예외를 정의
+    static class TestUserServiceException extends RuntimeException {
+    }
+}
+```
+
+- 다른 예외가 발생했을 경우와 구분하기 위해 테스트 목적을 띤 예외를정의해두기
+- -> 테스트 서비스와 같이 테스트 클래스내 스태틱 멤버로 만들기
+
+#### 강제 예외 발생을 통한 테스트
+
+- 사용자 레벨 업그레이드를 시도하다가 중간에 예외가 발생했을 경우, 그 전에 업그레이드했떤 사용자도 원래 상태로 돌아갔는지 확인..
+
+```java
+class UserServiceTest {
+    //..
+    @Test
+    public void upgradeAllOrNothing() {
+        UserService testUserService = new TestUserService(users.get(3).getId());
+        testUserService.setUserDao(this.userDao); // 수동 DI
+        userDao.deleteAll();
+        for (User user : users) {
+            userDao.add(user);
+        }
+        try {
+            testUserService.upgradeLevels();
+            fail("TestUserServiceException expected");
+        } catch (TestUserServiceException e) {
+            //TestUserService가 던져주는 예외를 잡아서 계속 진행되도록 함. 
+        }
+        checkLevelUpgraded(users.get(1), false);
+    }
+}
+```
