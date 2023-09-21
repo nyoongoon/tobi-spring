@@ -128,10 +128,10 @@ public class UserServiceTest {
         }
         try {
             testUserService.upgradeLevels();
-            fail("TestUserServiceException expected");
+            fail("TestUserServiceException expected"); // 예외 테스트이므로 정상종료라면 실패
         } catch (TestUserServiceException e) {
             //TestUserService가 던져주는 예외를 잡아서 계속 진행되도록 함.
         }
-        checkLevelUpgraded(users.get(1), false);
+        checkLevelUpgraded(users.get(1), false);  // users.get(1)의 인스턴스는 레벨 업데이트 된 상태
     }
 }

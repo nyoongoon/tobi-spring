@@ -3385,11 +3385,80 @@ class UserServiceTest {
         }
         try {
             testUserService.upgradeLevels();
-            fail("TestUserServiceException expected");
+            fail("TestUserServiceException expected"); // 예외 테스트이므로 정상종료라면 실패
         } catch (TestUserServiceException e) {
-            //TestUserService가 던져주는 예외를 잡아서 계속 진행되도록 함. 
+            //TestUserService가 던져주는 예외를 잡아서 계속 진행되도록 함.
         }
-        checkLevelUpgraded(users.get(1), false);
+        checkLevelUpgraded(users.get(1), false);  // users.get(1)의 인스턴스는 레벨 업데이트 된 상태
     }
+}
+```
+
+- -> 테스트는 실패함 두번째 사용자 레벨이 BASIC에서 SIVLER로 바뀐것이 네번째 사용자 처리 중에 예외 발생했지만 그대로 유지되는 중
+
+
+#### 테스트 실패의 원인 
+- updateLevels()가 하나의 트랜잭션 안에서 동작하지 않았기 때문 
+
+
+### 트랜잭션 경계설정
+- 두가지 작업이 하나의 트랜잭션이 되려면, 두번째 SQL이 성공적으로 DB에서 수행되기 전에 문제가 발생한 경우, 앞에서 처리한 SQL 작업도 취소시켜야함. 
+- -> 이런 취소 작업을 트랜잭션 롤백이라고 함. 
+- -> 반대로 여러개의 SQL을 하나의 트랜잭션으로 처리하는 경우 모든 SQL 수행작업이 다 성공적으로 마무리 됐다고 DB에 알려서 작업을 확장 -> 트랜잭션 커밋
+
+#### JDBC 트랜잭션의 트랜잭션 경계 설정
+- 트랜잭션은 시작하는 방법은 한가지지만, **끝나는 방법은 롤백과, 커밋 두가지**.
+- 애플리케이션 내에서 트랜잭션이 시작되고 끝나는 위치를 트랜잭션의 경계라고 부름
+- 트랜잭션 적용 간단 예제)
+```java
+class ex {
+    public void ex() {
+        Connection c = dataSource.getConntection(); //DB 커넥션
+        c.setAutoCommit(false); //트랜잭션 시작...
+        try {
+            PreparedStatment st1 = c.prepareStatement("...");
+            st1.executeUpdate();
+
+            PreparedStatment st2 = c.prepareStatement("...");
+            st2.executeUpdate();
+
+            c.commit(); //트랜잭션 커밋
+        } catch (Exception e) {
+            c.rollback(); // 트랜잭션 롤백  
+        } //트랜잭션 끝...
+        c.close();
+    }
+}  
+```
+
+##### Connection
+- Jdbc 트랜잭션은 하나의 Connection을 가져와 사용하다 닫는 사이에서 일어남. 
+- 트랜잭션 시작과 종료는 Connection 오브젝트를 통해 이뤄짐.
+- Jdbc에서 트랜잭션을 시작하려면 자동커밋 옵션을 false로 만들어주면 됨. -> jdbc의 기본 설정은 db작업 수행 직후 자동 커밋
+- -> 작업 마다 커밋해서 트랜잭션을 끝내버리므로 여러개의 db 작업을 모아서 트랜잭션을 만드는 기능이 꺼져 있음.. 
+- -> 이렇게 **하나의 DB 커넥션 안에서 만들어지는 트랜잭션을 로컬 트랜잭션**이라고도 함
+
+#### UserService와 UserDao의 트랜잭션 문제
+- 위의 UserService의 upgradeLevels()에 트랜잭션이 적용되지 않은 이유
+- -> 트랜잭션을 시작하고, 커밋하고, 롤백하는 트랜잭션 경계설정코드가 존재하지 않았음. 
+- -> **JdbcTemplate 사용한 후 Connection 오브젝트가 숨겨짐**.. 
+
+##### JdbcTemplate에서의 Connection
+- JdbcTemplate은 직접 만들어봤던 JdbcContext와 작업 흐름이 거의 동일함. 
+- 하나의 템플릿 메소드 안에서 DataSource의 getConnection() 메소드를 호출해서 Conntection오브젝트를 가져오고,
+- -> 작업을 마치면 Connection을 확실하게 닫아주고 템플릿 메소드를 빠져나온다.. 
+- -> 결국 템플릿 메소드 호출 반 번에 한 개의 DB 커넥션이 만들어지고 닫히는 일까지 일어나는것.
+- -> 일반적으로 트랜잭션은 커넥션 보다도 존재 범위가 짧다. -> 메소두 호출될때마다 트랜잭션 시작, 메소드 끝나기전 트랜잭션 종료
+- -> 결국, JdbcTemplate의 메소드를 사용하는 UserDao는 각 메소드마다 하나씩 독립적인 트랜잭션으로 실행될 수밖에 없음. 
+- --> upgradeLevels()와 같이 여러 번의 DB에 업데이트 해야하는 작업을 하나의 트랜잭션으로 만들려면 어떻게 해야할까?
+
+#### 비즈니스 로직 내의 트랜잭션 경계설정 
+- UserService와 UserDao를 그대로 둔 채로 트랜잭션을 적용하려면 결국 트랜잭션의 결계설정 작업을 UserSerivce쪽으로 가져와야함.
+- 트랜잭션 경계를 updateLevels() 메소드 안에 두려면 DB 커넥션도 이 메소드 안에서 만들고, 종료시킬 필요가 있음.
+##### UserService에서 Connection 만들기..?
+- -> UserService에서 Connection 만들어서 UserDao에 전달... -> 메소드 호출마다 Connection 오브젝트 파라미터로 전달..
+```java
+public interface UserDao{
+    
 }
 ```
