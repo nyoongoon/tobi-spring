@@ -3458,7 +3458,96 @@ class ex {
 ##### UserService에서 Connection 만들기..?
 - -> UserService에서 Connection 만들어서 UserDao에 전달... -> 메소드 호출마다 Connection 오브젝트 파라미터로 전달..
 ```java
-public interface UserDao{
-    
+public interface UserDao {
+  public void add(Connection c, User user);
+  public User get(Connection c, String id);
+  //...
+  public void update(Connection c, User user1);
 }
 ```
+- UserService에서 생성된 Connection이 레파지토리 레이어까지 이어서 물고 전달되어야하는 상황...
+```java
+class UserService{
+    public void upgradeLevels() throws Exception{
+        Connection c = ...;
+        //..
+       try{
+           upgradeLevel(c, user);
+       }catch (Exception e){
+           //..
+       }
+       //..
+    }
+    public void upgradeLevel(Connection c, User user){
+        user.upgradeLevel();
+        userDao.update(c, user);
+    }
+}
+interface UserDao{
+    public update(Connection c, User user);
+}
+```
+
+#### UserService 트랜잭션 경계설정의 문제점 
+- JdbcTemplate을 사용x. jdbc api를 직접 사용하는 초기 방식으로 돌아옴
+- DAO의 메소드들과 UserService들의 메소드들에 Connection 파라미터가 추가되어야한다는 점
+- Connection 파라미터가 UserDao인터페이스 메소드에 추가되면 더이상 DB 엑세스 기술에 독립적일수가 없음.
+
+### 트랜잭션 동기화
+#### Connection 파라미터 제거
+- 스프링이 제안하는 방법은 **독립적인 트랜잭션 동기화** 방식.
+- 트랜잭션 동기화란 UserService에서 트랜잭션을 시작하기 위해 만든 **Connection 오브젝트를 특별한 저장소에 보관**해두고,
+- -> 이후에 호출되는 **DAO의 메소드에서 저장된 Connection을 가져다가 사용**하게 하는 것.
+![](img/img_9.png)
+- (1) UserService는 Connection을 생성
+- (2) 이를 트랜잭션 동기화 저장소에 저장해두고 Connection의setAutoCommit(false)호출하여 트랜잭션 시작
+- (3) 첫 번쨰 update() 메소드가 호출되고, JdbcTemplate 메소드에서 
+- (4) 트랜잭션 저장소에 현재 시작된 트랜잭션을 가진 Connection 오브젝트가 존재하는지 확인.
+- (5) Connection을 이용해 PreparedStatement를 만들어 수정 SQL을 실행
+- 트랜잭션 동기화 저장소에서 DB 커텍션을 가져왔을 경우 JdbcTemplate은 Connection을 닫지 않은 채로 작업 마침
+- (6) 두 번째 update()가 호출되면 이떄도 마찬가지로 (7) 트랜잭션 동기화 저장소에서 Connection을 가져와 (8)을 사용함
+- (9) 마지막 update()도 (10) 같은 트랜잭션을 가진 Connection을 가져와 (11) 사용
+- 트랜잭션 내의 모든 작업이 정상적으로 끝났으면 UserService는 이제 (12) Connection의 commit()을 호출해서 트랜잭션을 완료시킴
+- (13) 마지막으로 트랜잭션 저장소가 더이상 Connection오브젝트를 저장하지 않도록 이를 제거 
+- -> 어느 작업이라도 예외상황이 발생하면 UserService는 Connection의 rollback()을 호출하고 트랜잭션을 종료.
+- -> 이때도 트랜잭션 저장소에 저장된 동기화된 Connection 오브젝트는 제거해줘야함.
+- 트랜잭션 동기화 저장소는 작업 스레드마다 독립적으로 Connection 오브젝트를 저장하고 관리하기 때문에
+- -> 다중 사용자를 처리하는 서버의 멀테스레드 환경에서도 충돌이 날 염려 없음.
+
+
+#### 트랜잭션 동기화 적용
+- 스프링은 JdbcTemplate과 더불어 이런 트랜잭션 동기화 기능을 지원하는 간단한 유틸리티 메소드를 제공함.
+```java
+public class UserService {
+    private DataSource dataSource;
+
+    public void setDataSource(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    public void upgradeLevels() throws Exception {
+        TransactionSynchronizationManager.initSynchronization(); // 트랜잭션 동기화 관리자를 이용해 동기화 작업을 초기화
+        Connection c = DataSourceUtils.getConnection(dataSource);
+        c.setAutoCommit(false);
+
+        try {
+            List<User> users = userDao.getAll();
+            for (User user : users) {
+                if (canUpgradeLevel(user)) {
+                    upgradeLevel(user);
+                }
+            }
+            c.commit();
+        } catch (Exception e) {
+            c.rollback();
+            throw e;
+        } finally {
+            DataSourceUtils.releaseConnection(c, dataSource); //db 커넥션 닫기 
+            TransactionSynchronizationManager.unbindResource(this.dataSource);
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+}
+```
+- DataSourceUtils에서 제공하는 getConnection() 메소드를 통해 DB 커넥션을 생성함.
+- DataSourceUtils의 getConnection() 메소드는 Connection 오브젝트 생성해줄뿐만아니라, 트랜잭션 동기화에 사용하도록 저장소에 바인딩해줌
