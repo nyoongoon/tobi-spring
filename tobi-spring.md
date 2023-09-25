@@ -3551,3 +3551,52 @@ public class UserService {
 ```
 - DataSourceUtils에서 제공하는 getConnection() 메소드를 통해 DB 커넥션을 생성함.
 - DataSourceUtils의 getConnection() 메소드는 Connection 오브젝트 생성해줄뿐만아니라, 트랜잭션 동기화에 사용하도록 저장소에 바인딩해줌
+
+#### JdbcTemplate 트랜잭션 동기화
+- JdbcTemplate은 update()나 query()같은 JDBC 작업의 템플릿 메소드를 호출하면 직접 Connection을 생성하고 종료하는 일을 담당
+- 트랜잭션 동기화 저장소에 등록된 DB 커넥션이나 트랜잭션이 없는 경우에는 JdbcTemplate이 직접 DB 커넥션을 만들고 트랜잭션을 시작해서 JDBC 작업을 진행함.
+- 트랜잭션 동기화 저장소에 커넥션이 있다면 가져와서 사용함.
+
+
+### 트랜잭션 서비스 추상화
+#### 기술과 환경에 종속되는 트랜잭션 경계 설정 코드 
+- 여러개의 DB를 사용하고 있을 경우의 이슈 -> 하나의 트랜잭션 안에서 여러개의 DB 데이터 넣는 작업이 필요
+- 로컬 트랜잭션은 하나의 DB Connection에 종속됨 
+- -> 별도의 **트랜잭션 관리자를 통해 트랜잭션 관리하는 글로벌 트랜잭션** 방식 사용해야함
+- -> JTA : Java Transaction API
+![](img/img_10.png)
+- 애플리케이션에서는 기존방법대로 DB는 JDBC, 메시징서버라면 JMS 같은 API를 사용해서 필요한 작업을 수행
+- 트랜잭션은 JDBC나 JMS API를 사용해서 직접 제어하지 않고, JTA를 통해 트랜잭션 매니저가관리하도록 위임함
+- 트랜잭션 매니저는 DB와 메시징 서버를 제어하고 관리하는 각각의 리소스 매니저와 XA프로토콜을 통해 연결됨
+- -> 분산 트랜잭션 또는 글로벌 트랜잭션 가능
+
+```java
+class ex {
+  void exMethod() {
+    InitialContext ctx = new InitialContext();
+    UserTransaction tx = (UserTransaction) ctx.lookup(USER_TX_JNDI_NAME);
+    tx.begin();
+    Connection c = dataSource.getConnection(); // JNDI로 가져온 dataSource 사용해야함. 
+    try{
+        // 데이터 엑세스 코드
+      tx.commit();
+    }catch (Exception e){
+        tx.rollback();
+        throw e;
+    } finally {
+        c.close();
+    }
+  }
+}
+```
+- JTA를 이용한 방법으로 바뀌긴 했지만
+- -> Connection 메소드 대신에 UserTransation메소드를 사용한다는 점을 제외하면 트랜잭션 처리 방법은 별로 달라진 게 없음
+- -> 문제는 UserService 코드를 수정해야한다는 점
+- -> 또 문제는 하이네이트 등을 이용한 트랜잭션 관리 코드는 JDBC나 JTA의 코드와는 또 다르다는 것. 
+- 하이버네이트는 Connection을 직접사용하지 않고 Session이라는 것을 사용. 독자적인 트랜잭션관리 API를 사용 
+
+#### 트랜잭션 API의 의존관계 문제와 해결책
+![](img/img_11.png)
+- 원래 UserService는 UserDao 인터페이스에만 의존하는 구조였음. 
+- -> JDBC에 종속적인 Connection 을 이용한 트랜잭션 코드가 UserService에 등장하면서부터
+- -> UserService는 UserDaoJdbc에 간접적으로 의존하는 코드가 되버림..

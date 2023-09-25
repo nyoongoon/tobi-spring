@@ -31,6 +31,9 @@ public class UserServiceTest {
     private UserService userService;
     @Autowired
     private UserDaoJdbc userDao;
+    @Autowired
+    private DataSource dataSource;
+
     private List<User> users;
 
     @Test
@@ -119,9 +122,10 @@ public class UserServiceTest {
     }
 
     @Test
-    public void upgradeAllOrNothing() {
+    public void upgradeAllOrNothing() throws Exception  {
         UserService testUserService = new TestUserService(users.get(3).getId());
         testUserService.setUserDao(this.userDao); // 수동 DI
+        testUserService.setDateSource(this.dataSource); // 트랜잭션 동기화에 필요한 DataSource 수동 ID
         userDao.deleteAll();
         for (User user : users) {
             userDao.add(user);

@@ -39,6 +39,7 @@ public class DaoFactory {
     public UserService userService() {
         UserService userService = new UserService();
         userService.setUserDao(userDao());
+        userService.setDateSource(dataSource()); // 트랜잭션 동기화 처리를 위한 DI
         return userService;
     }
 }
