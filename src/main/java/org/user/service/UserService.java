@@ -1,6 +1,7 @@
 package org.user.service;
 
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.user.dao.Level;
 import org.user.dao.UserDao;
@@ -14,15 +15,17 @@ public class UserService {
     public static final int MIN_LOGCOUNT_FOR_SILVER = 50;
     public static final int MIN_RECCOMEND_FOR_GOLD = 30;
     UserDao userDao;
-    private DataSource dataSource;
+
+    private PlatformTransactionManager transactionManager;
 
     public void setUserDao(UserDao userDao) {
         this.userDao = userDao;
     }
 
-    public void setDateSource(DataSource dataSource){
-        this.dataSource = dataSource;
+    public void setTransactionManager(PlatformTransactionManager transactionManager){
+        this.transactionManager = transactionManager;
     }
+
 
 //    public void upgradeLevels() { //사용자 레벨 관리 기능
 //        List<User> users = userDao.getAll();
@@ -53,9 +56,8 @@ public class UserService {
     }
 
     public void upgradeLevels() throws Exception {
-        TransactionSynchronizationManager.initSynchronization(); // 트랜잭션 동기화 관리자를 이용해 동기화 작업을 초기화
-        Connection c = DataSourceUtils.getConnection(dataSource);
-        c.setAutoCommit(false);
+            TransactionStatus status =
+                this.transactionManager.getTransaction(new DefaultTransactionDefinition());
 
         try{
             List<User> users = userDao.getAll();
@@ -64,14 +66,10 @@ public class UserService {
                     upgradeLevel(user);
                 }
             }
-            c.commit();
+            this.transactionManager.commit(status);
         }catch (Exception e){
-            c.rollback();
+            this.transactionManager.rollback(status);
             throw e;
-        }finally {
-            DataSourceUtils.releaseConnection(c, dataSource); //db 커넥션 닫기
-            TransactionSynchronizationManager.unbindResource(this.dataSource);
-            TransactionSynchronizationManager.clearSynchronization();
         }
     }
 

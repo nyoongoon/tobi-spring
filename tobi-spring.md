@@ -3396,20 +3396,22 @@ class UserServiceTest {
 
 - -> 테스트는 실패함 두번째 사용자 레벨이 BASIC에서 SIVLER로 바뀐것이 네번째 사용자 처리 중에 예외 발생했지만 그대로 유지되는 중
 
+#### 테스트 실패의 원인
 
-#### 테스트 실패의 원인 
-- updateLevels()가 하나의 트랜잭션 안에서 동작하지 않았기 때문 
-
+- updateLevels()가 하나의 트랜잭션 안에서 동작하지 않았기 때문
 
 ### 트랜잭션 경계설정
-- 두가지 작업이 하나의 트랜잭션이 되려면, 두번째 SQL이 성공적으로 DB에서 수행되기 전에 문제가 발생한 경우, 앞에서 처리한 SQL 작업도 취소시켜야함. 
-- -> 이런 취소 작업을 트랜잭션 롤백이라고 함. 
+
+- 두가지 작업이 하나의 트랜잭션이 되려면, 두번째 SQL이 성공적으로 DB에서 수행되기 전에 문제가 발생한 경우, 앞에서 처리한 SQL 작업도 취소시켜야함.
+- -> 이런 취소 작업을 트랜잭션 롤백이라고 함.
 - -> 반대로 여러개의 SQL을 하나의 트랜잭션으로 처리하는 경우 모든 SQL 수행작업이 다 성공적으로 마무리 됐다고 DB에 알려서 작업을 확장 -> 트랜잭션 커밋
 
 #### JDBC 트랜잭션의 트랜잭션 경계 설정
+
 - 트랜잭션은 시작하는 방법은 한가지지만, **끝나는 방법은 롤백과, 커밋 두가지**.
 - 애플리케이션 내에서 트랜잭션이 시작되고 끝나는 위치를 트랜잭션의 경계라고 부름
 - 트랜잭션 적용 간단 예제)
+
 ```java
 class ex {
     public void ex() {
@@ -3432,91 +3434,108 @@ class ex {
 ```
 
 ##### Connection
-- Jdbc 트랜잭션은 하나의 Connection을 가져와 사용하다 닫는 사이에서 일어남. 
+
+- Jdbc 트랜잭션은 하나의 Connection을 가져와 사용하다 닫는 사이에서 일어남.
 - 트랜잭션 시작과 종료는 Connection 오브젝트를 통해 이뤄짐.
 - Jdbc에서 트랜잭션을 시작하려면 자동커밋 옵션을 false로 만들어주면 됨. -> jdbc의 기본 설정은 db작업 수행 직후 자동 커밋
-- -> 작업 마다 커밋해서 트랜잭션을 끝내버리므로 여러개의 db 작업을 모아서 트랜잭션을 만드는 기능이 꺼져 있음.. 
+- -> 작업 마다 커밋해서 트랜잭션을 끝내버리므로 여러개의 db 작업을 모아서 트랜잭션을 만드는 기능이 꺼져 있음..
 - -> 이렇게 **하나의 DB 커넥션 안에서 만들어지는 트랜잭션을 로컬 트랜잭션**이라고도 함
 
 #### UserService와 UserDao의 트랜잭션 문제
+
 - 위의 UserService의 upgradeLevels()에 트랜잭션이 적용되지 않은 이유
-- -> 트랜잭션을 시작하고, 커밋하고, 롤백하는 트랜잭션 경계설정코드가 존재하지 않았음. 
-- -> **JdbcTemplate 사용한 후 Connection 오브젝트가 숨겨짐**.. 
+- -> 트랜잭션을 시작하고, 커밋하고, 롤백하는 트랜잭션 경계설정코드가 존재하지 않았음.
+- -> **JdbcTemplate 사용한 후 Connection 오브젝트가 숨겨짐**..
 
 ##### JdbcTemplate에서의 Connection
-- JdbcTemplate은 직접 만들어봤던 JdbcContext와 작업 흐름이 거의 동일함. 
+
+- JdbcTemplate은 직접 만들어봤던 JdbcContext와 작업 흐름이 거의 동일함.
 - 하나의 템플릿 메소드 안에서 DataSource의 getConnection() 메소드를 호출해서 Conntection오브젝트를 가져오고,
-- -> 작업을 마치면 Connection을 확실하게 닫아주고 템플릿 메소드를 빠져나온다.. 
+- -> 작업을 마치면 Connection을 확실하게 닫아주고 템플릿 메소드를 빠져나온다..
 - -> 결국 템플릿 메소드 호출 반 번에 한 개의 DB 커넥션이 만들어지고 닫히는 일까지 일어나는것.
 - -> 일반적으로 트랜잭션은 커넥션 보다도 존재 범위가 짧다. -> 메소두 호출될때마다 트랜잭션 시작, 메소드 끝나기전 트랜잭션 종료
-- -> 결국, JdbcTemplate의 메소드를 사용하는 UserDao는 각 메소드마다 하나씩 독립적인 트랜잭션으로 실행될 수밖에 없음. 
+- -> 결국, JdbcTemplate의 메소드를 사용하는 UserDao는 각 메소드마다 하나씩 독립적인 트랜잭션으로 실행될 수밖에 없음.
 - --> upgradeLevels()와 같이 여러 번의 DB에 업데이트 해야하는 작업을 하나의 트랜잭션으로 만들려면 어떻게 해야할까?
 
-#### 비즈니스 로직 내의 트랜잭션 경계설정 
+#### 비즈니스 로직 내의 트랜잭션 경계설정
+
 - UserService와 UserDao를 그대로 둔 채로 트랜잭션을 적용하려면 결국 트랜잭션의 결계설정 작업을 UserSerivce쪽으로 가져와야함.
 - 트랜잭션 경계를 updateLevels() 메소드 안에 두려면 DB 커넥션도 이 메소드 안에서 만들고, 종료시킬 필요가 있음.
+
 ##### UserService에서 Connection 만들기..?
+
 - -> UserService에서 Connection 만들어서 UserDao에 전달... -> 메소드 호출마다 Connection 오브젝트 파라미터로 전달..
+
 ```java
 public interface UserDao {
-  public void add(Connection c, User user);
-  public User get(Connection c, String id);
-  //...
-  public void update(Connection c, User user1);
+    public void add(Connection c, User user);
+
+    public User get(Connection c, String id);
+
+    //...
+    public void update(Connection c, User user1);
 }
 ```
+
 - UserService에서 생성된 Connection이 레파지토리 레이어까지 이어서 물고 전달되어야하는 상황...
+
 ```java
-class UserService{
-    public void upgradeLevels() throws Exception{
+class UserService {
+    public void upgradeLevels() throws Exception {
         Connection c = ...;
         //..
-       try{
-           upgradeLevel(c, user);
-       }catch (Exception e){
-           //..
-       }
-       //..
+        try {
+            upgradeLevel(c, user);
+        } catch (Exception e) {
+            //..
+        }
+        //..
     }
-    public void upgradeLevel(Connection c, User user){
+
+    public void upgradeLevel(Connection c, User user) {
         user.upgradeLevel();
         userDao.update(c, user);
     }
 }
-interface UserDao{
+
+interface UserDao {
     public update(Connection c, User user);
 }
 ```
 
-#### UserService 트랜잭션 경계설정의 문제점 
+#### UserService 트랜잭션 경계설정의 문제점
+
 - JdbcTemplate을 사용x. jdbc api를 직접 사용하는 초기 방식으로 돌아옴
 - DAO의 메소드들과 UserService들의 메소드들에 Connection 파라미터가 추가되어야한다는 점
 - Connection 파라미터가 UserDao인터페이스 메소드에 추가되면 더이상 DB 엑세스 기술에 독립적일수가 없음.
 
 ### 트랜잭션 동기화
+
 #### Connection 파라미터 제거
+
 - 스프링이 제안하는 방법은 **독립적인 트랜잭션 동기화** 방식.
 - 트랜잭션 동기화란 UserService에서 트랜잭션을 시작하기 위해 만든 **Connection 오브젝트를 특별한 저장소에 보관**해두고,
 - -> 이후에 호출되는 **DAO의 메소드에서 저장된 Connection을 가져다가 사용**하게 하는 것.
-![](img/img_9.png)
+  ![](img/img_9.png)
 - (1) UserService는 Connection을 생성
 - (2) 이를 트랜잭션 동기화 저장소에 저장해두고 Connection의setAutoCommit(false)호출하여 트랜잭션 시작
-- (3) 첫 번쨰 update() 메소드가 호출되고, JdbcTemplate 메소드에서 
+- (3) 첫 번쨰 update() 메소드가 호출되고, JdbcTemplate 메소드에서
 - (4) 트랜잭션 저장소에 현재 시작된 트랜잭션을 가진 Connection 오브젝트가 존재하는지 확인.
 - (5) Connection을 이용해 PreparedStatement를 만들어 수정 SQL을 실행
 - 트랜잭션 동기화 저장소에서 DB 커텍션을 가져왔을 경우 JdbcTemplate은 Connection을 닫지 않은 채로 작업 마침
 - (6) 두 번째 update()가 호출되면 이떄도 마찬가지로 (7) 트랜잭션 동기화 저장소에서 Connection을 가져와 (8)을 사용함
 - (9) 마지막 update()도 (10) 같은 트랜잭션을 가진 Connection을 가져와 (11) 사용
 - 트랜잭션 내의 모든 작업이 정상적으로 끝났으면 UserService는 이제 (12) Connection의 commit()을 호출해서 트랜잭션을 완료시킴
-- (13) 마지막으로 트랜잭션 저장소가 더이상 Connection오브젝트를 저장하지 않도록 이를 제거 
+- (13) 마지막으로 트랜잭션 저장소가 더이상 Connection오브젝트를 저장하지 않도록 이를 제거
 - -> 어느 작업이라도 예외상황이 발생하면 UserService는 Connection의 rollback()을 호출하고 트랜잭션을 종료.
 - -> 이때도 트랜잭션 저장소에 저장된 동기화된 Connection 오브젝트는 제거해줘야함.
 - 트랜잭션 동기화 저장소는 작업 스레드마다 독립적으로 Connection 오브젝트를 저장하고 관리하기 때문에
 - -> 다중 사용자를 처리하는 서버의 멀테스레드 환경에서도 충돌이 날 염려 없음.
 
-
 #### 트랜잭션 동기화 적용
+
 - 스프링은 JdbcTemplate과 더불어 이런 트랜잭션 동기화 기능을 지원하는 간단한 유틸리티 메소드를 제공함.
+
 ```java
 public class UserService {
     private DataSource dataSource;
@@ -3549,22 +3568,25 @@ public class UserService {
     }
 }
 ```
+
 - DataSourceUtils에서 제공하는 getConnection() 메소드를 통해 DB 커넥션을 생성함.
 - DataSourceUtils의 getConnection() 메소드는 Connection 오브젝트 생성해줄뿐만아니라, 트랜잭션 동기화에 사용하도록 저장소에 바인딩해줌
 
 #### JdbcTemplate 트랜잭션 동기화
+
 - JdbcTemplate은 update()나 query()같은 JDBC 작업의 템플릿 메소드를 호출하면 직접 Connection을 생성하고 종료하는 일을 담당
 - 트랜잭션 동기화 저장소에 등록된 DB 커넥션이나 트랜잭션이 없는 경우에는 JdbcTemplate이 직접 DB 커넥션을 만들고 트랜잭션을 시작해서 JDBC 작업을 진행함.
 - 트랜잭션 동기화 저장소에 커넥션이 있다면 가져와서 사용함.
 
-
 ### 트랜잭션 서비스 추상화
-#### 기술과 환경에 종속되는 트랜잭션 경계 설정 코드 
+
+#### 기술과 환경에 종속되는 트랜잭션 경계 설정 코드
+
 - 여러개의 DB를 사용하고 있을 경우의 이슈 -> 하나의 트랜잭션 안에서 여러개의 DB 데이터 넣는 작업이 필요
-- 로컬 트랜잭션은 하나의 DB Connection에 종속됨 
+- 로컬 트랜잭션은 하나의 DB Connection에 종속됨
 - -> 별도의 **트랜잭션 관리자를 통해 트랜잭션 관리하는 글로벌 트랜잭션** 방식 사용해야함
 - -> JTA : Java Transaction API
-![](img/img_10.png)
+  ![](img/img_10.png)
 - 애플리케이션에서는 기존방법대로 DB는 JDBC, 메시징서버라면 JMS 같은 API를 사용해서 필요한 작업을 수행
 - 트랜잭션은 JDBC나 JMS API를 사용해서 직접 제어하지 않고, JTA를 통해 트랜잭션 매니저가관리하도록 위임함
 - 트랜잭션 매니저는 DB와 메시징 서버를 제어하고 관리하는 각각의 리소스 매니저와 XA프로토콜을 통해 연결됨
@@ -3572,31 +3594,127 @@ public class UserService {
 
 ```java
 class ex {
-  void exMethod() {
-    InitialContext ctx = new InitialContext();
-    UserTransaction tx = (UserTransaction) ctx.lookup(USER_TX_JNDI_NAME);
-    tx.begin();
-    Connection c = dataSource.getConnection(); // JNDI로 가져온 dataSource 사용해야함. 
-    try{
-        // 데이터 엑세스 코드
-      tx.commit();
-    }catch (Exception e){
-        tx.rollback();
-        throw e;
-    } finally {
-        c.close();
+    void exMethod() {
+        InitialContext ctx = new InitialContext();
+        UserTransaction tx = (UserTransaction) ctx.lookup(USER_TX_JNDI_NAME);
+        tx.begin();
+        Connection c = dataSource.getConnection(); // JNDI로 가져온 dataSource 사용해야함. 
+        try {
+            // 데이터 엑세스 코드
+            tx.commit();
+        } catch (Exception e) {
+            tx.rollback();
+            throw e;
+        } finally {
+            c.close();
+        }
     }
-  }
 }
 ```
+
 - JTA를 이용한 방법으로 바뀌긴 했지만
 - -> Connection 메소드 대신에 UserTransation메소드를 사용한다는 점을 제외하면 트랜잭션 처리 방법은 별로 달라진 게 없음
 - -> 문제는 UserService 코드를 수정해야한다는 점
-- -> 또 문제는 하이네이트 등을 이용한 트랜잭션 관리 코드는 JDBC나 JTA의 코드와는 또 다르다는 것. 
-- 하이버네이트는 Connection을 직접사용하지 않고 Session이라는 것을 사용. 독자적인 트랜잭션관리 API를 사용 
+- -> 또 문제는 하이네이트 등을 이용한 트랜잭션 관리 코드는 JDBC나 JTA의 코드와는 또 다르다는 것.
+- 하이버네이트는 Connection을 직접사용하지 않고 Session이라는 것을 사용. 독자적인 트랜잭션관리 API를 사용
 
 #### 트랜잭션 API의 의존관계 문제와 해결책
+
 ![](img/img_11.png)
-- 원래 UserService는 UserDao 인터페이스에만 의존하는 구조였음. 
+
+- 원래 UserService는 UserDao 인터페이스에만 의존하는 구조였음.
 - -> JDBC에 종속적인 Connection 을 이용한 트랜잭션 코드가 UserService에 등장하면서부터
 - -> UserService는 UserDaoJdbc에 간접적으로 의존하는 코드가 되버림..
+- -> 다행히 트랜잭션 경계설정을 담담하는 코드는 일정한 패턴을 갖는 유사한 구조
+- -> 이렇게 여러 기술의 사용방법에 공통점이 있다면 추상화를 생각해볼 수 있음.
+- -> **추상화**란 하위 시스템의 공통점을 뽑아내서 분리시키는 것
+- -> 하위시스템이 어떤 것인지 알지 못해도, 또는 하위 시스템이 바뀌더라도 일관된 방법으로 접근할 수가 있음.
+
+#### 스프링의 트랜잭션 서비스 추상화
+
+- 스프링은 트랜잭션 기술의 공통점을 담은 추상화 기술을 제공함.
+  ![](/img/img_12.png)
+
+```java
+class ex {
+    public void upgradeLevels() throws Exception {
+        PlatformTransactionManager transactionManager =
+                new DataSourceTransactionManager(dataSource); //JDBC 트랜잭션 추상 오브젝트 생성
+
+        //트랜잭션 시작
+        TransactionStatus status =
+                transactionManager.getTransaction(new DefaultTransactionDefinition());
+
+        try {
+            List<User> users = userDao.getAll();
+            for (User user : users) {
+                if (canUpgradeLevel(user)) {
+                    upgradeLevel(user);
+                }
+            }
+            transactionManager.commit(status); //트랜잭션 커밋
+        } catch (Exception e) {
+            transactionManager.rollback(status); //트랜잭션 커밋
+            throw e;
+        }
+    }
+}
+```
+
+##### PlatformTransactionManger
+
+- 스프링이 제공하는 트랜잭션 경계설정 추상 인터페이스
+- -> JDBC 로컬 트랜잭션을 이용한다면 DataSourceTransactionMAnager를 구현 클래스로 사용
+- JDBC를 이용하는 경우엔 먼저 Connection을 생성하고 나서 트랜잭션을 시작했지만
+- -> PlatformTransactionManager 에서는 트랜잭션을 가져오는 getTransaction() 메소드를 호출하기만 하면 됨
+- -> 필요에 따라 트랜잭션 매니저가 DB 커넥션을 가져오는 작업도 같이 수행해주기 떄문
+- -> 파라미터로 넘기는 DefaultTransactionDefinition 오브젝트는 트랜잭션에 대한 속성을 담고 있음
+
+```
+//트랜잭션 시작
+TransactionStatus status =
+    transactionManager.getTransaction(new DefaultTransactionDefinition());
+```
+
+- -> 파라미터로 넘기는 DefaultTransactionDefinition 오브젝트는 트랜잭션에 대한 속성을 담고 있음.
+- -> 이렇게 시작된 트랜잭션은 TransactionStatus 타입의 변수에 저장됨
+- -> TransactionStatus는 트랜잭션에 대한 조작이 필요할 때 PlatformTransactionManager 메소드의 파라미터로 전달.
+- -> 트랜잭션 작업을 모두 수행한 후에는 트랜잭션을 만들 때 돌려받은 TransactionStatus 오브젝트를 파라미터로 해서 PlatfromTrasactionManager의 commit() 호출, 예외시
+  rollback() 호출
+
+#### 트랜잭션 기술 설정의 분리
+
+- 트랜잭션 추상화 API를 적용한 UserService 코드를 JTA를 이용하는 글로벌 트랜잭션으로 변경하기
+- DataSourceTransactionManager 구현 클래스를 -> JTATransactionManager로 바꿔 주기만 하면 됨
+- JTATransactionManager는 주요 자바 서버에서 제공하는 JTA 정보를 JNDI를 통해 자동으로 인식하는 기능 갖고 있음
+- 하지만 현재 어떤 트랜잭션 매니저 구현 클래스를 사용할지 UserService 코드가 알고 있는 것은 DI 원칙에 위배됨
+- -> 그렇다면 DataSourceTransactionManager는 스프링 빈으로 등록하고 UserService가 DI 방식으로 사용하게 해야함.
+
+##### 클래스를 스프링 빈으로 등록할 때 검토할 사항
+
+- 어떤 클래스든 스프링의 빈으로 등록할 때 먼저 검토해야할 것은
+- -> **싱글톤으로 만들어져 여러 스레드에서 동시에 사용해도 괜찮은가** 하는 점!
+- 상태를 갖고 있고, 멀티스레드 환경에서 안전하지 않으면 문제가 발생..
+- PlatformTranasctionManager의 구현 클래스는 싱글톤 사용 가능
+
+```java
+public class UserService {
+    //..
+    private PlatformTransactionManager transactionManager;
+
+    public void setTransactionManager(PlatformTransactionManager transactionManager) {
+        this.transactionManager = transactionManager;
+    }
+    //..
+}
+```
+- 트랜잭션을 JTA를 이용하는 것으로 변경하려면 빈 설정 변경해주기
+- -> JTA는 애플리케이션 서버의 트랜잭션 서비스를 이용하기 때문에 DataSource도 서버가 제공해주는 것을 사용해야함..
+
+## 서비스 추상화와 단일 책임 원칙
+
+#### 수직, 수평 계층구조와 의존관계
+- 애플리케이션 오직에 따른 수평적 구분이든, 로직과 기술이라는 수직적 구분이든 스프링의 DI를 통하여 결합도를 낮출 수 있었음.
+
+#### 단일 책임 원칙
+- 이런 적절한 분리가 가져오는 특징은 단일 책임 원칙 

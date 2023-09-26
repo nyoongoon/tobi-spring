@@ -28,6 +28,8 @@ import static org.user.service.UserService.MIN_RECCOMEND_FOR_GOLD;
 public class UserServiceTest {
 
     @Autowired
+    PlatformTransactionManager transacionManager;
+    @Autowired
     private UserService userService;
     @Autowired
     private UserDaoJdbc userDao;
@@ -125,7 +127,7 @@ public class UserServiceTest {
     public void upgradeAllOrNothing() throws Exception  {
         UserService testUserService = new TestUserService(users.get(3).getId());
         testUserService.setUserDao(this.userDao); // 수동 DI
-        testUserService.setDateSource(this.dataSource); // 트랜잭션 동기화에 필요한 DataSource 수동 ID
+        testUserService.setTransactionManager(transacionManager);
         userDao.deleteAll();
         for (User user : users) {
             userDao.add(user);

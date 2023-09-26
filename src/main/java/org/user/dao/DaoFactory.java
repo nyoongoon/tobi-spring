@@ -2,6 +2,7 @@ package org.user.dao;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.SimpleDriverDataSource;
 import org.user.service.UserService;
 
@@ -19,6 +20,13 @@ public class DaoFactory {
         dataSource.setPassword("book");
 
         return dataSource;
+    }
+
+    @Bean
+    public DataSourceTransactionManager transactionManager(){
+        DataSourceTransactionManager dataSourceTransactionManager
+                = new DataSourceTransactionManager(dataSource());
+        return dataSourceTransactionManager;
     }
 
 //    @Bean
@@ -39,7 +47,7 @@ public class DaoFactory {
     public UserService userService() {
         UserService userService = new UserService();
         userService.setUserDao(userDao());
-        userService.setDateSource(dataSource()); // 트랜잭션 동기화 처리를 위한 DI
+        userService.setTransactionManager(transactionManager());
         return userService;
     }
 }
