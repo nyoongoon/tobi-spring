@@ -3708,13 +3708,119 @@ public class UserService {
     //..
 }
 ```
+
 - 트랜잭션을 JTA를 이용하는 것으로 변경하려면 빈 설정 변경해주기
 - -> JTA는 애플리케이션 서버의 트랜잭션 서비스를 이용하기 때문에 DataSource도 서버가 제공해주는 것을 사용해야함..
 
 ## 서비스 추상화와 단일 책임 원칙
 
 #### 수직, 수평 계층구조와 의존관계
-- 애플리케이션 오직에 따른 수평적 구분이든, 로직과 기술이라는 수직적 구분이든 스프링의 DI를 통하여 결합도를 낮출 수 있었음.
+
+- 애플리케이션 로직에 따른 수평적 구분이든, 로직과 기술이라는 수직적 구분이든 스프링의 DI를 통하여 결합도를 낮출 수 있었음.
 
 #### 단일 책임 원칙
-- 이런 적절한 분리가 가져오는 특징은 단일 책임 원칙 
+
+- 이런 적절한 분리가 가져오는 특징은 단일 책임 원칙
+- 하나의 모듈은 한가지 책임을 가져야함 -> 하나의 모듈이 바뀌는 이유는 한 가지
+
+#### 단일 책임 원칙의 장점
+
+- 어떤 변경이 필요할 때 수정 대상이 명확해짐
+
+## 메일 서비스 추상화
+
+- 레벨이 업그레이드되는 사용자에게 안내 메일 발송 기능 추가하기
+
+### JavaMail을 이용한 메일 발송 기능
+
+- javax.mail 패키지에서 제공하는 자바의 이메일 클래스 사용
+
+```java
+class ex {
+    protected void upgradeLevel(User user) {
+        user.upgradeLevel();
+        userDao.update(user);
+        sendUpgradeEMail(user);
+    }
+}
+```
+
+```java
+class ex {
+    private void sendUpgradeEMail(User user) {
+        Properties props = new Properties();
+        props.put("mail.smtp.host", "mail.ksug.org");
+        Session s = Session.getInstance(props, null);
+        MimeMessage message = new MimeMessage(s);
+        try {
+            messgae.setFrom(new InternetAddress("useradmin@ksug.org"));
+            message.addRecipient(Message.RecipientType.TO,
+                    new InternetAddress(user.getEmail()));
+            message.setSubject("Upgrade 안내");
+            message.setText("사용자님의 등급이 " + user.getLevel().name() + "로 업그레이드되었습니다.");
+            Transport.send(message);
+        } catch (AddressException e) {
+            throw new RuntimeException(e);
+        } catch (MessagingException e) {
+            throw new RuntimeException(e);
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
+```
+
+### JavaMail이 포함된 코드의 테스트
+- 메일서버가 준비되어있지 않을 때 테스트는 어떻게?
+- SMTP라는 표준 메일 발송 프로토콜로 메일 서버에 요청이 전달되기만 한다면 메일이 발송될 것이라고 믿고,
+- 실제 메일 서버가 아닌 테스트용으로 따로 준비한 메일 서버를 사용해 테스트해도 좋다면
+- -> 똑같은 원리를 UserService와 JavaMail사이에도 적용할 수 있음.
+- -> JavaMail은 자바의 표준기술이므로, JavaMail API를 통해 요청이 들어간다는 보장만 있다면 테스트할떄마다 JavaMail을 직접 구동시킬 ㅣㅍㄹ요가 없음
+- -> 개발중이거나 테스트를 수행할때난 JavaMail을 대신할 수 있으면서 JavaMail과 동일한 인터페이스를 갖는 코드가 동작하도록 만들어도 됨
+
+### 테스트를 위한 서비스 추상화
+- JavaMail과 동일한 인터페이스를 갖는 오브젝트를 만들어서 테스트
+#### JavaMail을 이용한 ㅔㅌ스트의 문제점
+- JavaMail의 핵심 API에는 DataSource처럼 인터페이스로 만들어져서 구현을 바꿀 수 있는게 없음.
+- 메일 발송을 위해 가장 먼저 생성해야하는 javax.mail.Session 클래스의 사용방법 살펴보기
+```
+Session s = Session.getInstance(props, null);
+```
+- JavaMail에서는 Session 오브젝트를 만들어야만 메일 메시지를 생성할 수 있고, 메일을 전송할 수 있음.
+- Session은 인터페이스가 아니고 클래스, 생성자가 pricvate으로 되어있어 직섭 생성도 불가능.
+- -> 스태틱 팩토리 메소드를 이용해 오브젝트를 만드는 방법밖에 없음
+- -> Session 클래스는 더 이상 상속이 불가능한 final 클래스.
+- 메일메시지를 작성하는 MailMessage, 전송기능을 맡고 있는 Transport도 마찬가지.
+- -> JavaMail처럼 테스트하기 힘든 구조인 API를 테스트하기 좋게 만드는 방법
+- -> 트랜잭션을 적용하면서 살펴봤던 서비스 추상화를 적용하면 됨. 
+- -> 스프링은 JavaMail에 대한 추상화 기능을 제공함.
+
+#### 메일 발송 기능 추상화
+- JavaMail의 서비스 추상화 인터페이스
+```java
+package org.springframework.mail;
+//...
+public interface MailSender{
+    void send(SimpleMailMessage simpleMessage) throws MailException;
+    void sned(SimpleMailMessgae[] simpleMessages) throws MailException;
+}
+```
+- 위 인터페이스는 SimpleMailMessgae라는 인터페이스를 구현한 클래스에 담긴 메일메시지를 전송하는 메소드로만 구성되어있음. 
+- -> 기본적으로 JavaMail을 사용해 메일발송기능을 제공하는 JavaMailSenderImple 클래스를 이용하면 됨
+
+```java
+class ex{
+  private void sendUpgradeEMail(User user){
+    JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
+    mailSender.setHost("mail.server.com");
+    SimpleMailMessage mailMessage = new SimpleMailMessage();
+    mailMessage.setTo(user.getEmail());
+    mailMessage.setSubject("Upgrade 안내");
+    mailMessage.setText("사용자님의 등급이" + user.getLevel().name());
+    mailSender.send(mailMessage);
+  }
+}
+```
+- 스프링의 MailSender를 이용한 메일 발송 메소드 
+- 메시지는 MailMessage 인터페이스를 구현한 JavaMailSenederImple의 오브젝트 만들어 사용
+- JavaMailSenderImpl은 내부적으로 JavaMail API를 이용해 메일을 전송해줌. 

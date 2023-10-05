@@ -1,15 +1,14 @@
 package org.user.service;
 
-import org.springframework.jdbc.CannotGetJdbcConnectionException;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.jdbc.datasource.DataSourceUtils;
+import com.sun.xml.internal.messaging.saaj.packaging.mime.MessagingException;
+import com.sun.xml.internal.org.jvnet.mimepull.MIMEMessage;
 import org.user.dao.Level;
 import org.user.dao.UserDao;
 import org.user.domain.User;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
+import java.io.UnsupportedEncodingException;
 import java.util.List;
+import java.util.Properties;
 
 public class UserService {
     public static final int MIN_LOGCOUNT_FOR_SILVER = 50;
@@ -90,5 +89,16 @@ public class UserService {
     protected void upgradeLevel(User user){
         user.upgradeLevel();
         userDao.update(user);
+        sendUpgradeEMail(user);
+    }
+
+    private void sendUpgradeEMail(User user){
+        JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
+        mailSender.setHost("mail.server.com");
+        SimpleMailMessage mailMessage = new SimpleMailMessage();
+        mailMessage.setTo(user.getEmail());
+        mailMessage.setSubject("Upgrade 안내");
+        mailMessage.setText("사용자님의 등급이" + user.getLevel().name());
+        mailSender.send(mailMessage);
     }
 }
