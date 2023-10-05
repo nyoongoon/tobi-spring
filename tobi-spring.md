@@ -3822,5 +3822,6 @@ class ex{
 }
 ```
 - 스프링의 MailSender를 이용한 메일 발송 메소드 
-- 메시지는 MailMessage 인터페이스를 구현한 JavaMailSenederImple의 오브젝트 만들어 사용
+- 메시지는 MailMessage 인터페이스를 구현한 SimpleMailMessage 사용
+- 메일 전송 오브젝트는 JavaMailSender 인터페이스를 구현한 JavaMailSenderImpl의 오브젝트를 만들어 사용
 - JavaMailSenderImpl은 내부적으로 JavaMail API를 이용해 메일을 전송해줌. 
