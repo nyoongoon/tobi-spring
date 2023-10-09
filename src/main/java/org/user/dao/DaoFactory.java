@@ -50,4 +50,11 @@ public class DaoFactory {
         userService.setTransactionManager(transactionManager());
         return userService;
     }
+
+    @Bean
+    public JavaMailSenderImpl mailSender(){
+        JavaMailSenderImpl mailSender = new JavaMailSenderImple();
+        mailSender.setHost("mail.server.com");
+        return mailSender;
+    }
 }

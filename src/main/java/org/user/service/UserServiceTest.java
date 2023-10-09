@@ -35,7 +35,8 @@ public class UserServiceTest {
     private UserDaoJdbc userDao;
     @Autowired
     private DataSource dataSource;
-
+    @Autowired
+    MailSender mailSender;
     private List<User> users;
 
     @Test
@@ -128,6 +129,7 @@ public class UserServiceTest {
         UserService testUserService = new TestUserService(users.get(3).getId());
         testUserService.setUserDao(this.userDao); // 수동 DI
         testUserService.setTransactionManager(transacionManager);
+        testUserService.setMailSender(mailSender);
         userDao.deleteAll();
         for (User user : users) {
             userDao.add(user);
