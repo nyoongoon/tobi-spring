@@ -3891,10 +3891,13 @@ class exTest {
     }
 }
 ```
+
 - -> 더미 구현 클래스를 사용했으므로 테스트 성공
 
 #### 테스트와 서비스 추상황
+
 ![](/img/img_13.png)
+
 - 일반적으로 서비스 추상화라고 하면 트랜잭션과 같은 기능은 유나하나, 사용방법이 다른 로우레벨의 다양항 기술에 대해 추상 인터페이스와 일관성 있는 접근 방법을 제공해주는 것을 말함.
 - 반면, JavaMail경우처럼 테스트를 어렵게 만드는 건전하지 않은 방식으로 설계된 API를 사용할떄도 유용하게 쓰일 수 있음
 - -> 스프링이 직접 제공하는 추상화 클래스는 JavaMailServiceImple하나 뿐
@@ -3904,22 +3907,185 @@ class exTest {
 - -> 또한, 메일을 큐에 담아두었다가, 정해진시간에 메일 발송하는 기능을 만드는 것도 어렵지 않음.
 
 #### 메일 발송 기능에 트랜잭션 개념 적용
+
 - DB가 도중에 롤백되었다고 해도, 메일은 발송해버렸다면?
 - -> 1. 메일 리스트를 저장해두고, 업그레이드 작업이 모두 성공적으로 끝났다면 한 번에 메일을 전송하기
-- -> 2. MailSender를 확장해서 메일 전송에 트랜잭션 개념을 적용하기 
+- -> 2. MailSender를 확장해서 메일 전송에 트랜잭션 개념을 적용하기
 - --> 업그레이드 이전에 새로운 메일 전송 작업 시작을 알려주도, send()를 호출해도 실제 메일 발송하지 않도록 저장해둠
 - --> 업그레이드 작업이 끝나면 트랜잭션 기능을 가진 MailSender에 지금까지 저장된 메일을 모두 발송하고, 예외가 발생하면 모두 취소
 - 전자는 비즈니스 로직과 트랜잭션 개념이 섞이게 됨
 - 후자는 MailSender 구현 클래스를 이용하여 서로 다른 종류의 작업을 분리해 처리하게 하는 장점
+
 #### 서비스 추상화 결론
+
 - 서비스 추상화는 원활한 테스트만을 위해서도 충분히 가치 있음
 - 기술이나 환경이 바뀔 가능성이 있음에도, JavaMail처럼 확장이 불가능하게 설계해놓은 API를 사용해야하는 경우라면 추상화 계층의 도입을 적극 고려해볼 필요가 있음
-- 특히, 외부의 리소스롸 연동하는 대부분 작업은 추상화의 대상이 될 수 있음. 
+- 특히, 외부의 리소스롸 연동하는 대부분 작업은 추상화의 대상이 될 수 있음.
 
 ### 테스트 대역
+
 #### 의존 오브젝트 변경을 통한 테스트 방법
+
 ![](img/img_14.png)
+
 - 하나의 오브젝트가 사용하는 오브젝트를 DI에서 의존 오브젝트라고 함. -> 협력 오브젝트라고도 함
 - 트랜잭션과 메일의 추상화 과정에서 봤듯, 실전에서 오브젝트 교체가 일어나지 않더라도, 테스트 만으로도 DI는 유용함.
-- -> 운영중에는 절대 바뀌지 않더라도, 테스트때는 바꿀수밖에 없기 때문.. 
-#### 테스트 대역의 종류와 특징
+- -> 운영중에는 절대 바뀌지 않더라도, 테스트때는 바꿀수밖에 없기 때문..
+
+#### 테스트 대역의 종류와 특징 (스텁)
+
+- 테스트 환경을 만둘어주기 위해, 테스트 대상이 되는 오브젝트의 기능에만 출실하게 수행하면서 빠르게, 자주 테스트를 실행할 수 있도록
+- -> 사용하는 이런 오브젝트를 통틀어서 테스트 대역이라고 부름.
+- **테스트 스텁** : 테스트 대상 오브젝트의 의존객체로 존재하면서, 테스트 동안 코드가 정상적으로 수행할 수 있도록 돕는 것.
+- -> DI로 의존 오브젝트를 테스트 스텁으로 변경 (DummyMailSender)
+- -> 리턴값이 있는 메소드를 이용하는 경우 스텁에 미리 테스트에 필요한 정보를 리턴해주도록 만들 수 있음. 또는 스텁으로 예외 상황에 대한 테스트 하기도 함
+
+#### 목 오브젝트
+
+- 테스트 오브젝트가 간접적으로 의존 오브젝트에 넘기는 값과 그 행위 자체에 대해서도 검증하고 싶다면?
+- -> 테스트 대상의 간접적인 출력결과를 검증하고,
+- -> 테스트 대상 오브젝트와 의존 오브젝트 사이에서 일어나는 일을 검증할 수 있도록
+- -> 특별히 설계된 목 오브젝트 사용.
+  ![](/img/img_15.png)
+- 위의 구조에서 5번을 제외하면 목오브젝트를 스텁이라고도 볼 수 있음
+- 테스트 대상은 의존 오브젝트에게 값을 입력받기도 함
+- -> 이를 위해 별도로 준비해둔 스텁 오브젝트가 메소드 호출 시 측정 값을 리턴하도록 만들어두면 됨
+- -> 위의 테스트 과정을 테스트에서는 직접 알수가 없다는 문제가 있음
+- -> 테스트 대상과 의존 오브젝트 사이에 **주고받는 정보를 보존해두는 기능을 가진 테스트용 의존 오브젝트인 목 오브젝트**를 만들어서 사용해야함.
+- -> 목 오브젝트를 만들어서, 테스트 대상과 목오브젝트 사이에서 일어난 일에 대해 확인을 요청, 검증을 할 수 있음
+
+#### 목 오브젝트를 이용한 테스트
+
+```java
+class testEx {
+    static class MockMailSender implements MailSender {
+        private List<String> requests = new ArrayList<String>();
+
+        public List<String> getRequests() {
+            return requests;
+        }
+
+        public void send(SimpleMailMessage mailMessage) throws MailException {
+            requests.add(mailMessage.getTo()[0]); //간단하게 첫 수신자메일만 저장함
+        }
+
+        public void send(SimpleMailMessage[] mailMessages) throws MailException {
+
+        }
+    }
+
+}
+```
+
+- 테스트에만 사용될 것이기 때문에 테스트 클래스 안에 스태틱 멤버 클래스로 정의함
+- -> 목 오브젝트를 통해 메일 발송 여부를 검증
+
+```java
+class testEx {
+    @Test
+    @DirtiesContext // 컨텍스트의 DI 설정을 변경하는 테스트라는 것을 알려줌
+    public void upgradedLevels() throws Exception {
+        userDao.deleteAll();
+        for (User user : users) {
+            userDao.add(user);
+        }
+        MailSender mockMailSender = new MockMailSender();
+        userService.setMailSender(mockMailSender);
+        userService.upgradeLevels();
+
+        checkLevelUpgraded(users.get(0), false);
+        checkLevelUpgraded(users.get(1), true);
+        checkLevelUpgraded(users.get(2), false);
+        checkLevelUpgraded(users.get(3), true);
+        checkLevelUpgraded(users.get(4), false);
+
+        List<String> request = mockMailSender.getRequests();
+        assertThat(request.size(), is(2));
+        assertThat(request.get(0), is(users.get(1).getEmail()));
+        assertThat(request.get(1), is(users.get(3).getEmail()));
+    }
+}
+```
+
+- 목 오브젝트를 통해 테스트 대상 오브젝트 내부에서 일어나는 일이나, 다른 오브젝트 사이에서 주고받는 정보까지 검증 간으해짐
+- -> 테스트 수행 자체에 목적으로 의존 오브젝트에 간접적으로 입력값을 제공해주는 스텁 오브젝트,
+- -> 간접적인 출력값까지 확인 및 검증이 가능한 목 오브젝트.
+
+## 정리
+
+- 로직, 기술, 테스트에 독립적일 수 있도록 서비스 추상화를 사용함.
+- -> 로직에 독립적 : UserDao 인터페이스를 사용하여 DI
+- -> 기술에 독립적 : 트랜잭션 API 추상화를 사용하여 DI
+- -> 테스트에 독립적 : JavaMail을 추상화 -> 목오브젝트로 결과까지 검증가능
+
+# 6장 AOP
+
+- **AOP**는 **IoC/DI**, **서비스 추상화**와 더불어 스프링의 3대 기반ㅇ기술임
+- AOP를 바르게 이용하려면 OOP를 대체하려고 하는 것처럼 보이는 AOP라는 이름 뒤에 감춰진 내용을 알아야함..
+- 스프링에 적용된 가장 인기있는 AOP의 적용대상은 바로 **선언적 트랜잭션 기능**
+- -> 서비스 추상화를 통해 해결했던 트랜잭션 경계설정 기능을 AOP를 이용해 바꿔보기..
+
+## 트랜잭션 코드의 분리
+
+- 스프링이 제공한 트랜잭션 인터페이스를 썼음에도 비즈니스 로직 클래스에 트랜잭션 코드가 많은 자리를 차지함
+
+```java
+class ex {
+    public void upgradeLevels() throws Exception {
+        TransactionStatus status = this.transactiobnManager
+                .getTransaction(new DefaultTransactionDefinition()); // 트랜잭션 경계설정 시작
+        try {
+            List<User> users = userDao.getAll();
+            for (User user : users) {
+                if (canUpgradeLevel(user)) {
+                    upgradeLevel(user);
+                }
+            }
+            this.transactionManage.commit(status);
+        } catch (Exception e) {
+            this.transactionManager.rollback(status); //트랜잭션 경계설정 끝
+            throw e;
+        }
+    }
+}
+```
+
+- 위 코드의 특징은 트랜잭션 경계설정의 코드와 비즈니스 로직 코드 간에 서로 주고받는 정보가 없다는 점
+- 두 코드는 성격이 다를 뿐 아니라 주고받는 것도 없는 완벽하게 독립적인 코드...
+
+### 트랜잭션 코드 / 비즈니스 코드 메소드로 추출 및 분리 해보기..
+
+```java
+class ex {
+    public void upgradeLevels() throws Exception {
+        TransactionStatus status = this.transactiobnManager
+                .getTransaction(new DefaultTransactionDefinition()); // 트랜잭션 경계설정 시작
+        try {
+            upgradeLevelsInternal();
+            this.transactionManage.commit(status);
+        } catch (Exception e) {
+            this.transactionManager.rollback(status); //트랜잭션 경계설정 끝
+            throw e;
+        }
+    }
+
+    private void upgradeLevelsInternal() {
+        List<User> users = userDao.getAll();
+        for (User user : users) {
+            if (canUpgradeLevel(user)) {
+                upgradeLevel(user);
+            }
+        }
+    }
+}
+```
+
+### DI를 이용한 클래스의 분리 
+- 여전히 트랜잭션 담당하는 기술적 코드가 서비스 클래스에 자리잡고 있음..
+- 트랜잭션 코드를 클래스 밖으로 뽑아버리기...
+
+#### DI 적용을 이용한 트랜잭션 분리 
+![](img/img_16.png)
+- UserService를 인터페이스로 만들고 기존 코드는 UserService 인터페이스의 구현 클래스를 만들어 넣기
+![](img/img_17.png)
+- 이어서..

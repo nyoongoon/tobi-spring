@@ -5,6 +5,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.user.dao.Level;
@@ -13,6 +14,7 @@ import org.user.dao.UserDaoJdbc;
 import org.user.domain.User;
 
 import javax.sql.DataSource;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -124,8 +126,24 @@ public class UserServiceTest {
     static class TestUserServiceException extends RuntimeException {
     }
 
+    static class MockMailSender implements MailSender {
+        private List<String> requests = new ArrayList<String>();
+
+        public List<String> getRequests() {
+            return requests;
+        }
+
+        public void send(SimpleMailMessage mailMessage) throws MailException {
+            requests.add(mailMessage.getTo()[0]); //간단하게 첫 수신자메일만 저장함
+        }
+
+        public void send(SimpleMailMessage[] mailMessages) throws MailException {
+
+        }
+    }
+
     @Test
-    public void upgradeAllOrNothing() throws Exception  {
+    public void upgradeAllOrNothing() throws Exception {
         UserService testUserService = new TestUserService(users.get(3).getId());
         testUserService.setUserDao(this.userDao); // 수동 DI
         testUserService.setTransactionManager(transacionManager);
@@ -141,5 +159,28 @@ public class UserServiceTest {
             //TestUserService가 던져주는 예외를 잡아서 계속 진행되도록 함.
         }
         checkLevelUpgraded(users.get(1), false);  // users.get(1)의 인스턴스는 레벨 업데이트 된 상태
+    }
+
+    @Test
+    @DirtiesContext // 컨텍스트의 DI 설정을 변경하는 테스트라는 것을 알려줌
+    public void upgradedLevels() throws Exception {
+        userDao.deleteAll();
+        for(User user : users) {
+            userDao.add(user);
+        }
+        MailSender mockMailSender = new MockMailSender();
+        userService.setMailSender(mockMailSender);
+        userService.upgradeLevels();
+
+        checkLevelUpgraded(users.get(0), false);
+        checkLevelUpgraded(users.get(1), true);
+        checkLevelUpgraded(users.get(2), false);
+        checkLevelUpgraded(users.get(3), true);
+        checkLevelUpgraded(users.get(4), false);
+
+        List<String> request = mockMailSender.getRequests();
+        assertThat(request.size(), is(2));
+        assertThat(request.get(0), is(users.get(1).getEmail()));
+        assertThat(request.get(1), is(users.get(3).getEmail()));
     }
 }
