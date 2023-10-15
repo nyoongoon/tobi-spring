@@ -9,7 +9,6 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.user.dao.Level;
-import org.user.dao.UserDao;
 import org.user.dao.UserDaoJdbc;
 import org.user.domain.User;
 
@@ -28,11 +27,13 @@ import static org.user.service.UserService.MIN_RECCOMEND_FOR_GOLD;
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(locations = "/org/user/dao/DaoFactory.java")
 public class UserServiceTest {
-
+ㅋ
     @Autowired
     PlatformTransactionManager transacionManager;
     @Autowired
-    private UserService userService;
+    private UserService UserService;
+    @Autowired
+    private UserServiceImpl userServiceImpl;
     @Autowired
     private UserDaoJdbc userDao;
     @Autowired
@@ -47,7 +48,7 @@ public class UserServiceTest {
         for (User user : users) {
             userDao.add(user);
         }
-        userService.upgradeLevels();
+        UserService.upgradeLevels();
 
 //        checkLevel(users.get(0), Level.BASIC);
 //        checkLevel(users.get(1), Level.SILVER);
@@ -83,8 +84,8 @@ public class UserServiceTest {
         User userWithoutLevel = users.get(0); //레벨 비어있으면 초기화
         userWithoutLevel.setLevel(null);
 
-        userService.add(userWithLevel);
-        userService.add(userWithoutLevel);
+        UserService.add(userWithLevel);
+        UserService.add(userWithoutLevel);
 
         User userWithLevelRead = userDao.get(userWithLevel.getId());
         User userWithoutLevelRead = userDao.get(userWithoutLevel.getId());
@@ -108,7 +109,7 @@ public class UserServiceTest {
         );
     }
 
-    static class TestUserService extends UserService {
+    static class TestUserService extends UserServiceImpl {
         private String id;
 
         private TestUserService(String id) {
@@ -148,12 +149,17 @@ public class UserServiceTest {
         testUserService.setUserDao(this.userDao); // 수동 DI
         testUserService.setTransactionManager(transacionManager);
         testUserService.setMailSender(mailSender);
+
+        UserServiceTx txUserService = new UserServiceTx();
+        txUserService.setTransactionManager(transacionManager);
+        txUserService.setUserService(txUserService);
+
         userDao.deleteAll();
         for (User user : users) {
             userDao.add(user);
         }
         try {
-            testUserService.upgradeLevels();
+            txUserService.upgradeLevels();
             fail("TestUserServiceException expected"); // 예외 테스트이므로 정상종료라면 실패
         } catch (TestUserServiceException e) {
             //TestUserService가 던져주는 예외를 잡아서 계속 진행되도록 함.
@@ -169,8 +175,8 @@ public class UserServiceTest {
             userDao.add(user);
         }
         MailSender mockMailSender = new MockMailSender();
-        userService.setMailSender(mockMailSender);
-        userService.upgradeLevels();
+        userServiceImpl.setMailSender(mockMailSender);
+        userServiceImpl.upgradeLevels();
 
         checkLevelUpgraded(users.get(0), false);
         checkLevelUpgraded(users.get(1), true);

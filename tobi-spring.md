@@ -2986,7 +2986,7 @@ class ex {
         for (User user : users) {
             userDao.add(user);
         }
-        userService.upgradeLevels();
+        userServiceImpl.upgradeLevels();
 
         checkLevel(users.get(0), Level.BASIC);
         checkLevel(users.get(1), Level.SILVER);
@@ -3022,8 +3022,8 @@ class ex {
         User userWithoutLevel = users.get(0); //레벨 비어있으면 초기화
         userWithoutLevel.setLevel(null);
 
-        userService.add(userWithLevel);
-        userService.add(userWithoutLevel);
+        userServiceImpl.add(userWithLevel);
+        userServiceImpl.add(userWithoutLevel);
 
         User userWithLevelRead = userDao.get(userWithLevel.getId());
         User userWithoutLevelRead = userDao.get(userWithoutLevel.getId());
@@ -3213,7 +3213,7 @@ class ex {
         for (User user : users) {
             userDao.add(user);
         }
-        userService.upgradeLevels();
+        userServiceImpl.upgradeLevels();
 
 //        checkLevel(users.get(0), Level.BASIC);
 //        checkLevel(users.get(1), Level.SILVER);
@@ -3279,8 +3279,8 @@ public class UserService {
 ```
 
 ```java
-import static org.user.service.UserService.MIN_LOGCOUNT_FOR_SILVER;
-import static org.user.service.UserService.MIN_RECCOMEND_FOR_GOLD;
+import static org.user.service.UserServiceImpl.MIN_LOGCOUNT_FOR_SILVER;
+import static org.user.service.UserServiceImpl.MIN_RECCOMEND_FOR_GOLD;
 
 //..
 public class UserDaoJdbcTest {
@@ -3377,14 +3377,14 @@ class UserServiceTest {
     //..
     @Test
     public void upgradeAllOrNothing() {
-        UserService testUserService = new TestUserService(users.get(3).getId());
-        testUserService.setUserDao(this.userDao); // 수동 DI
+        UserService testUserServiceImpl = new TestUserService(users.get(3).getId());
+        testUserServiceImpl.setUserDao(this.userDao); // 수동 DI
         userDao.deleteAll();
         for (User user : users) {
             userDao.add(user);
         }
         try {
-            testUserService.upgradeLevels();
+            testUserServiceImpl.upgradeLevels();
             fail("TestUserServiceException expected"); // 예외 테스트이므로 정상종료라면 실패
         } catch (TestUserServiceException e) {
             //TestUserService가 던져주는 예외를 잡아서 계속 진행되도록 함.
@@ -3887,7 +3887,7 @@ class exTest {
     @Test
     public void upgradeAllOrNothing() throws Exception {
         //..
-        testUserService.setMailSender(mailSender);
+        testUserServiceImpl.setMailSender(mailSender);
     }
 }
 ```
@@ -3990,8 +3990,8 @@ class testEx {
             userDao.add(user);
         }
         MailSender mockMailSender = new MockMailSender();
-        userService.setMailSender(mockMailSender);
-        userService.upgradeLevels();
+        userServiceImpl.setMailSender(mockMailSender);
+        userServiceImpl.upgradeLevels();
 
         checkLevelUpgraded(users.get(0), false);
         checkLevelUpgraded(users.get(1), true);
@@ -4081,16 +4081,213 @@ class ex {
 ```
 
 ### DI를 이용한 클래스의 분리
+
 - 여전히 트랜잭션 담당하는 기술적 코드가 서비스 클래스에 자리잡고 있음..
 - 트랜잭션 코드를 클래스 밖으로 뽑아버리기...
 
 #### DI 적용을 이용한 트랜잭션 분리
+
 ![](img/img_16.png)
+
 - UserService를 인터페이스로 만들고 기존 코드는 UserService 인터페이스의 구현 클래스를 만들어 넣기
-![](img/img_17.png)
+  ![](img/img_17.png)
 - 단 번에 두개의 UserService 인터페이스를 구현클래스로 동시에 이용하기..?
-- 해결하려고 하는 문제는 UserService에는 순수하게 비즈니스 로직을 담고 있는 코드만 놔두고 
-- 트랜잭션 경계설정을 담당하는 코드를 외부로 뺴내려는 것 
+- 해결하려고 하는 문제는 UserService에는 순수하게 비즈니스 로직을 담고 있는 코드만 놔두고
+- 트랜잭션 경계설정을 담당하는 코드를 외부로 뺴내려는 것
 - -> 하지만 클라이언트가 UserService의 기능을 제대로 이요하려면 트랜잭션이 적용돼야함.
-![](img/img_18.png)
+  ![](img/img_18.png)
 - UserService를 구현한 또 다른 구현클래스를 만들기 -> 트랜잭션의 경계설정이라는 책임을 맡음
+
+#### UserService 인터페이스 도입
+
+```java
+public interface UserService {
+    void add(User user);
+
+    void upgradeLevels();
+}
+```
+
+- 구현클래스에서 트랜잭션 관련 코드는 제거
+
+```java
+class ex {
+    public void upgradeLevels() throws Exception {
+        List<User> users = userDao.getAll();
+        for (User user : users) {
+            if (canUpgradeLevel(user)) {
+                upgradeLevel(user);
+            }
+        }
+    }
+}
+```
+
+#### 분리된 트랜잭션 기능
+
+- 트랜잭션 처리를 담은 UserServiceTx 만들기
+- UserServiceTx는 UserService를 구현하게 만든 후,
+- 비즈니스 로직을 구현한 구현클래스에게 작업을 위임하게 만들기 !
+
+```java
+public class UserServiceTx implements UserService {
+    UserService userService;
+
+    public void setUserService(UserService userService) {
+        this.userService = userService;
+    }
+
+    @Override
+    public void add(User user) {
+        userService.add(user);
+    }
+
+    @Override
+    public void upgradeLevels() {
+        userService.upgradeLevels();
+    }
+}
+```
+
+- 트랜잭션 경계설정 작업 추가해주기
+
+```java
+public class UserServiceTx implements UserService {
+    UserService userService;
+    PlatformTransactionManager transactionManager;
+
+    public void setTransactionManager(
+            PlatformTransactionManager transactionManager) {
+        this.transactionManager = transactionManager;
+    }
+
+    public void setUserService(UserService userService) {
+        this.userService = userService;
+    }
+
+    @Override
+    public void add(User user) {
+        userService.add(user);
+    }
+
+    @Override
+    public void upgradeLevels() {
+        TransactionStatus status = this.transactionManager
+                .getTransaction(new DefaultTransactionDefinition());
+        try {
+            userService.upgradeLevels();
+            this.transactionManager.commit(status);
+        } catch (RuntimeException e) {
+            this.transactionManager.rollback(status);
+            throw e;
+        }
+    }
+}
+```
+
+#### 트랜잭션 적용을 위한 DI 설정
+
+- 클라이언트가 UserService라는 인터페이스를 통해 사용자 관리 로직을 이용하려고할 때
+- 먼저 트랜잭션을 담당하는 오브젝트가 사용돼서 트랜잭션에 관련된 작업을 진행해주고,
+- 실제 사용자 관리 로직을 담은 오브젝트가 이후에 호출됨.
+  ![](img/img_19.png)
+
+```java
+class ex {
+    @Bean
+    public UserServiceTx userService() {
+        UserServiceTx userServiceTx = new UserServiceTx();
+        userServiceTx.setUserService(userServicImpl());
+        userServiceTx.setTransactionManager(transactionManager());
+    }
+
+    @Bean
+    public UserServiceImpl userServicImpl() {
+        UserServiceImpl userServiceImpl = new UserServiceImpl();
+        userServiceImpl.setUserDao(userDao());
+        userServiceImpl.setMailSender(mailSender());
+        return userServiceImpl;
+    }
+}
+```
+
+- 클라이언트는 UserServiceTx빈을 호출해서 사용하도록
+- -> userService라는 대표적인 빈 아이디에 UserServiceTx클래스로 정의
+
+#### 트랜잭션 분리에 따른 테스트 수정
+
+- UserService클래스가 인터페이스와 두개의 클래스로 분리된 만큼 테스트에서도 변경
+- @Autowired는 같은 타입의 빈이 여러개라면 필드 일므을 이용해 빈을 찾음
+
+```
+@Autowired UserService userService; //UserServiceTx를 DI 
+```
+
+- 그러나 UserServeImpl을 테스트해야하는 경우 중에서
+- MailSender 목 오브젝트를 이용한 테스트 같이 직접 DI 해줘야할 경우 직접 UserServiceImpl 클래스의 오브젝트를 가져올 필요가 읬음
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+
+class exTest {
+    @Autowired
+    UserServiceImpl userServiceImpl;
+
+    @Test
+    public void upgradedLevels() throws Exception {
+        //.. 
+        MockMailSender mockMailSender = new MockMailSender();
+        userServiceImpl.setMailSender(mockMailSender);
+    }
+}
+```
+
+- 트랜잭션 기능을 테스트하는 upgradeAllOrNothing() 메소드도 변경 필요
+
+```java
+class exTest {
+    // 트랜잭션 테스트용 정의한 TestUserService는 UserServiceImpl을 상속하도록 수정
+    static class TestUserService extends UserServiceImp{
+      
+    }
+    
+    @Test
+    public void upgradeAllOrNothing() throws Exception {
+        UserService testUserService = new TestUserService(users.get(3).getId());
+        testUserService.setUserDao(this.userDao); // 수동 DI
+        testUserService.setTransactionManager(transacionManager);
+        testUserService.setMailSender(mailSender);
+
+        UserServiceTx txUserService = new UserServiceTx();
+        txUserService.setTransactionManager(transacionManager);
+        txUserService.setUserService(txUserService);
+
+        userDao.deleteAll();
+        for (User user : users) {
+            userDao.add(user);
+        }
+        try {
+            txUserService.upgradeLevels();
+            fail("TestUserServiceException expected"); // 예외 테스트이므로 정상종료라면 실패
+        }catch (TestUserServiceException e){
+          //...    
+        }
+      //...
+    }
+}
+```
+
+#### 트랜잭션 경계썰정 코드 분리의 장점
+- 비즈니스 로직을 담당하는 UserServiceImp의 코드를 작성할 때는 트랜잭션과 같은 기술적인 내용에 신경 쓰지 않아도 됨
+- 비즈니스 로직에 대한 테스트를 손쉽게 만들어낼 수 있다는 것. 
+
+
+## 고립된 단위 테스트
+- 테스트는 작은 단위로 하면 좋지만 테스트 대상이 다른 오브젝트와 환경에 의존하고 있다면 작은 단위 테스트가 주는 장점을 얻기 힘듬
+
+### 복잡한 의존관계 속의 테스트 
+### 테스트 대상 오브젝트 고립시키기
+- 테스트 대상이 환경이나, 외부서버, 다른 클래스의 코드에 종속되고 영향을 받지 않도록 고립 시킬 필요가 있음. 
+- -> 테스트 대상을 의존 대상으로부터 분리해서 고립시키는 방법은 테스트 대역을 사용하는 것..
+
+#### 테스트를 위한 UserServiceImple 고립

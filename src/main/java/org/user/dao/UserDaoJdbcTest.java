@@ -8,10 +8,7 @@ import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
-import org.user.dao.Level;
-import org.user.dao.UserDaoJdbc;
 import org.user.domain.User;
-import org.user.service.UserService;
 
 import javax.sql.DataSource;
 import java.sql.SQLDataException;
@@ -22,8 +19,8 @@ import java.util.List;
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
 
-import static org.user.service.UserService.MIN_LOGCOUNT_FOR_SILVER;
-import static org.user.service.UserService.MIN_RECCOMEND_FOR_GOLD;
+import static org.user.service.UserServiceImpl.MIN_LOGCOUNT_FOR_SILVER;
+import static org.user.service.UserServiceImpl.MIN_RECCOMEND_FOR_GOLD;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(locations = "/org/user/dao/DaoFactory.java")
