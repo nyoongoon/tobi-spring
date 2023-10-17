@@ -4247,10 +4247,10 @@ class exTest {
 ```java
 class exTest {
     // 트랜잭션 테스트용 정의한 TestUserService는 UserServiceImpl을 상속하도록 수정
-    static class TestUserService extends UserServiceImp{
-      
+    static class TestUserService extends UserServiceImp {
+
     }
-    
+
     @Test
     public void upgradeAllOrNothing() throws Exception {
         UserService testUserService = new TestUserService(users.get(3).getId());
@@ -4269,25 +4269,84 @@ class exTest {
         try {
             txUserService.upgradeLevels();
             fail("TestUserServiceException expected"); // 예외 테스트이므로 정상종료라면 실패
-        }catch (TestUserServiceException e){
-          //...    
+        } catch (TestUserServiceException e) {
+            //...    
         }
-      //...
+        //...
     }
 }
 ```
 
 #### 트랜잭션 경계썰정 코드 분리의 장점
-- 비즈니스 로직을 담당하는 UserServiceImp의 코드를 작성할 때는 트랜잭션과 같은 기술적인 내용에 신경 쓰지 않아도 됨
-- 비즈니스 로직에 대한 테스트를 손쉽게 만들어낼 수 있다는 것. 
 
+- 비즈니스 로직을 담당하는 UserServiceImp의 코드를 작성할 때는 트랜잭션과 같은 기술적인 내용에 신경 쓰지 않아도 됨
+- 비즈니스 로직에 대한 테스트를 손쉽게 만들어낼 수 있다는 것.
 
 ## 고립된 단위 테스트
+
 - 테스트는 작은 단위로 하면 좋지만 테스트 대상이 다른 오브젝트와 환경에 의존하고 있다면 작은 단위 테스트가 주는 장점을 얻기 힘듬
 
-### 복잡한 의존관계 속의 테스트 
+### 복잡한 의존관계 속의 테스트
+
 ### 테스트 대상 오브젝트 고립시키기
-- 테스트 대상이 환경이나, 외부서버, 다른 클래스의 코드에 종속되고 영향을 받지 않도록 고립 시킬 필요가 있음. 
+
+- 테스트 대상이 환경이나, 외부서버, 다른 클래스의 코드에 종속되고 영향을 받지 않도록 고립 시킬 필요가 있음.
 - -> 테스트 대상을 의존 대상으로부터 분리해서 고립시키는 방법은 테스트 대역을 사용하는 것..
 
 #### 테스트를 위한 UserServiceImple 고립
+
+![](img/img_20.png)
+
+- 고립된 테스트 방식으로 만든 UserServiceImpl은 결과가 DB 등에 남지 않으므로
+- upgradeLevels()처럼 결과가 리턴되지 않는 경우는 더더욱 어려움
+- -> 협력 오브젝트인 UserDao에게 어떤 요청을 했는지 확인하는 작업 필요하므로 Mock 객체로 생성
+- -> UserDao의 update() 메소드를 호출하는 것을 확인할 수 있다면 DB에 그 결과가 반영될 것으로 결론 내릴 수 있기 때문
+
+```java
+class exTest {
+    static class MockUserDao implements UserDao {
+        private List<User> users; // 레벨 업그레이드 후보 User 오브젝트 목록
+        private List<User> updated = new ArrayList<>(); // 업그레이드 대상 오브젝트를 저장해둘 목록
+
+        private MockUserDao(List<User> users) {
+            this.users = users;
+        }
+
+        public List<User> getUpdated() {
+            return this.updated;
+        }
+
+        public List<User> getAll() { // 스텁기능 제공
+            return this.users;
+        }
+
+        public void update(User user) { // 목 오브젝트 기능 제공.
+            updated.add(user);
+        }
+    }
+}
+```
+
+### 단위테스트와 통합테스트
+- 사용자 관리 기능 전체를 하나의 단위로 볼 수도 있고 하나의 클래스나 하나의 메소드를 단위로 볼 수도 있음
+- 책에서는 테스트 대역을 이용해 고립시켜서 테스트 하는 것을 단위테스트라고 부름
+- 두개 이상의 오브젝트 연동이나 외부 리소스가 참여하는 테스트는 통합 테스트
+
+#### 단위 VS 통합 고려사항
+- 항상 단위테스트를 먼저 고려하기
+- 하나 또는 긴밀한 클래스 몇개를 모아서 외부와의 의존관계를 모두 차단하고 대역을 이용하여 단위 테스트 만들기
+- 외부 리소스 사용해야만 하는 테스트는 통합테스트로 만들기
+- 단위테스트로 만들기 어려운 코드 예시 - DAO
+- -> DAO는 자체로 로직을 담고 있다기 보다는 DB를 통해 로직을 수행하는 인터페이스 같은 역할 
+- DAO테스트는 통합텡스트이지만, 코드에서 보자면 하나의 기능 단위 테스트하는 것이기도 함
+- -> DAO를 검증한 후, DAO를 이용하는 코드는 대역 오브젝트로 단위 테스트 가능. 
+- 단위테스트가 복잡하다고 판단되는 코드는 처음부터 통합 테스트 고려 가능
+- 스프링 테스트 컨텍스트 프레임워크 이요하는 테스트는 통합테스트다 
+
+### 목 프레임워크
+- 단위테스트를 만들기 위해서는 대역 오브젝트가 필수적임
+- 직접 목 오브젝트를 만들기 위해서는 인터페이스도 모두 일일이 구현해줘야함.
+- -> 특히 테스트 메소드별로 다른 검증 기능이 필요하다면, 같은 의존 인터페이스를 구현한 여러 목 클래스를 선언해줘야함.
+
+#### Mockito
+- 간단한 메소드 호출만으로 특정 인터페이스 구현한 테스트용 목 오브젝트 만들 수 있음.

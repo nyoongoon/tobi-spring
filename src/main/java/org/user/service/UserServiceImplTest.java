@@ -9,6 +9,7 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.user.dao.Level;
+import org.user.dao.UserDao;
 import org.user.dao.UserDaoJdbc;
 import org.user.domain.User;
 
@@ -143,6 +144,47 @@ public class UserServiceTest {
         }
     }
 
+    static class MockUserDao implements UserDao {
+        private List<User> users; // 레벨 업그레이드 후보 User 오브젝트 목록
+        private List<User> updated = new ArrayList<>(); // 업그레이드 대상 오브젝트를 저장해둘 목록
+        
+        private MockUserDao(List<User> users){
+            this.users = users;
+        }
+        
+        public List<User> getUpdated(){
+            return this.updated;
+        }
+        
+        public List<User> getAll(){ // 스텁기능 제공
+            return this.users;
+        }
+        
+        public void update(User user){ // 목 오브젝트 기능 제공.
+            updated.add(user);
+        }
+
+        @Override
+        public void add(User user) { // 테스트에 사용되지 않는 메소드
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public User get(String id) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void deleteAll() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int getCount() {
+            throw new UnsupportedOperationException();
+        }
+    }
+    
     @Test
     public void upgradeAllOrNothing() throws Exception {
         UserService testUserService = new TestUserService(users.get(3).getId());
@@ -170,23 +212,30 @@ public class UserServiceTest {
     @Test
     @DirtiesContext // 컨텍스트의 DI 설정을 변경하는 테스트라는 것을 알려줌
     public void upgradedLevels() throws Exception {
-        userDao.deleteAll();
-        for(User user : users) {
-            userDao.add(user);
-        }
+        UserServiceImpl userServiceImpl = new UserServiceImpl(); //고립 테스트에서는 직접 생성
+        MockUserDao mockUserDao = new MockUserDao(this.users);
+        userServiceImpl.setUserDao(mockUserDao);
+
         MailSender mockMailSender = new MockMailSender();
         userServiceImpl.setMailSender(mockMailSender);
+
         userServiceImpl.upgradeLevels();
 
-        checkLevelUpgraded(users.get(0), false);
-        checkLevelUpgraded(users.get(1), true);
-        checkLevelUpgraded(users.get(2), false);
-        checkLevelUpgraded(users.get(3), true);
-        checkLevelUpgraded(users.get(4), false);
+        List<User> updated = mockUserDao.getUpdated();
+        assertThat(updated.size(), is(2));
+
+
+        checkUserAndLevel(updated.get(0), "joytouch", Level.SILVER);
+        checkUserAndLevel(updated.get(1), "madnite1", Level.GOLD);
 
         List<String> request = mockMailSender.getRequests();
         assertThat(request.size(), is(2));
         assertThat(request.get(0), is(users.get(1).getEmail()));
         assertThat(request.get(1), is(users.get(3).getEmail()));
+    }
+
+    private void checkUserAndLevel(User updated, String expectedId, Level expectedLevel){
+        assertThat(updated.getId(), is(expectedId));
+        assertThat(updated.getLevel(), is(expectedLevel));
     }
 }
