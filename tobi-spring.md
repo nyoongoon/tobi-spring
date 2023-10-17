@@ -4328,25 +4328,127 @@ class exTest {
 ```
 
 ### 단위테스트와 통합테스트
+
 - 사용자 관리 기능 전체를 하나의 단위로 볼 수도 있고 하나의 클래스나 하나의 메소드를 단위로 볼 수도 있음
 - 책에서는 테스트 대역을 이용해 고립시켜서 테스트 하는 것을 단위테스트라고 부름
 - 두개 이상의 오브젝트 연동이나 외부 리소스가 참여하는 테스트는 통합 테스트
 
 #### 단위 VS 통합 고려사항
+
 - 항상 단위테스트를 먼저 고려하기
 - 하나 또는 긴밀한 클래스 몇개를 모아서 외부와의 의존관계를 모두 차단하고 대역을 이용하여 단위 테스트 만들기
 - 외부 리소스 사용해야만 하는 테스트는 통합테스트로 만들기
 - 단위테스트로 만들기 어려운 코드 예시 - DAO
-- -> DAO는 자체로 로직을 담고 있다기 보다는 DB를 통해 로직을 수행하는 인터페이스 같은 역할 
+- -> DAO는 자체로 로직을 담고 있다기 보다는 DB를 통해 로직을 수행하는 인터페이스 같은 역할
 - DAO테스트는 통합텡스트이지만, 코드에서 보자면 하나의 기능 단위 테스트하는 것이기도 함
-- -> DAO를 검증한 후, DAO를 이용하는 코드는 대역 오브젝트로 단위 테스트 가능. 
+- -> DAO를 검증한 후, DAO를 이용하는 코드는 대역 오브젝트로 단위 테스트 가능.
 - 단위테스트가 복잡하다고 판단되는 코드는 처음부터 통합 테스트 고려 가능
-- 스프링 테스트 컨텍스트 프레임워크 이요하는 테스트는 통합테스트다 
+- 스프링 테스트 컨텍스트 프레임워크 이요하는 테스트는 통합테스트다
 
 ### 목 프레임워크
+
 - 단위테스트를 만들기 위해서는 대역 오브젝트가 필수적임
 - 직접 목 오브젝트를 만들기 위해서는 인터페이스도 모두 일일이 구현해줘야함.
 - -> 특히 테스트 메소드별로 다른 검증 기능이 필요하다면, 같은 의존 인터페이스를 구현한 여러 목 클래스를 선언해줘야함.
 
 #### Mockito
+
 - 간단한 메소드 호출만으로 특정 인터페이스 구현한 테스트용 목 오브젝트 만들 수 있음.
+
+```
+UserDao mockUserDao = mock(UserDao.class);
+```
+
+- mock()은 org.mockito.Matchers 클래스에 정의된 스태틱 메소드
+
+```
+when(mockUserDao.getAll()).thenReturn(this.users);
+```
+
+- mockUserDao.getAll()이 호출됐을 때, users 리스트를 리턴해주라는 스텁기능 추가.
+- Mockito를 통해 만들어진 목 오브젝트는 메소드의 호출과 관련된 모든 내용을 자동으로 저장해두고, 이를 간단한 메소드로 검증할 수 있게 해줌.
+
+```
+verify(mockUserDao, time(2)).update(any(User.class));
+```
+
+- 테스트를 진행하는 동안 mockUserDao의 update() 메소드가 두 번 호출됐는지 확인하고 싶다면, 위 같은 검증코드 추가
+- -> User타입의 오브젝트를 파라미터로 받으며 update() 가 두 번 호출됐는지 호가인
+
+##### Mock 오브젝트 사용 단계
+
+- 1 인터페이스를 이용해 목 오브젝트를 만듦
+- 2 목 오브젝트가 리턴할 값이 있으면 이를 지정해줌. 메소드가 호출되면 예외를 강제로 던지게 만들 수도 있음
+- 3 테스트 대상 오브젝트에 DI해서 목 오브젝트가 테스트 중에 사용되도록 만듦
+- 4 테스트 대상 오브젝트를 사용한 후에 목 오브젝트의 특정 메소드가 호출됐는지, 어떤 값을 가지고 몇번 호출됐는지를 검증
+- -? 2, 4는 각각 필요한 경우메나 사용할 수 있음
+
+```java
+class exTest {
+    @Test
+    public void mockUpgradeLevel() throws Exception {
+        UserServiceImpl userService = new UserServiceImpl();
+
+        UserDao mockUserDao = mock(UserDao.class);
+        when(mockUser.Dao.getAll()).thenReturn(this.users);
+        userServiceImpl.setUserDao(mockUserDao);
+
+        MailSender mockMailSender = mock(MailSender.class);
+        userServiceImpl.setMailSender(mockMailSender);
+
+        userServiceImpl.upgradeLevels();
+
+        verify(mockUserDao, times(2)).update(any(User.class));
+        verify(mockUserDao, times(2)).update(any(User.class));
+        verify(mockUserDao).update(users.get(1));
+        assertThat(users.get(1).getLevel(), is(Level.SILVER));
+        verify(mockUserDao).update(users.get(3));
+        assertThat(users.get(3).getLevel(), is(Level.GOLD));
+
+        ArgumentCaptor<SimpleMailMessgae> mailMessageArg = //ArgumentCaptor -> 목오브젝트에 전달된 파라미터 가져와 검증
+                ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(mockMailSender, times(2)).send(mailMessageArg.capture());
+        List<SimpleMailMessage> mailMessages = mailMessageArg.getAllValues(); // 파라미터 내부 정보 확인
+        assertThat(mailMessages.get(0).getTo()[0], is(users.get(1).getEmail()));
+        assertThat(mailMessages.get(1).getTo()[0], is(users.get(3).getEmail()));
+    }
+}
+```
+- any()를 사용하면 파라미터의 내용은 무시하고 호출 횟숨나 확인할 수 있음
+- -> UserDao의 update() 메소드가 두번 호출됐고, 그 때의 파라미터가 getAll()에서 넘겨준 User목록의 두번쨰와 네번쨰여야함
+- verify(mockUserDao).update(users.get(1))은 users.get(1)을 파라미터로 update()가 호출된 적이 있는지 확인해줌.
+- 레벨의 변화는 파라미터의 직접 비교로는 직접 확인이 되지 않음 -> getAll()을 통해 전달했던 User 목록의 내용을 가지고 레벨 변경 직접 확인.
+- MailSender의 경우는 **ArgumentCaptor**라는 것을 사용해서 실제 MailSender **목 오브젝트에 전달된 파라미터를 가져와 내용을 검증**하는 방법을 사용
+- -> 파라미터의 내부 정보를 확인해야하는 경우 유용함. 
+
+
+## 다이나믹 프록시와 팩토리 빈
+### 프록시와 프록시 패턴, 데코레이터 패턴
+- 트랜잭션 기능에는 추상화 작업을 통해 이미 전략 패턴이 적용되어 있음. 
+- 하지만 전략패턴으로는 트랜잭션 기능의 구현 내용을 분리해냈을 뿐 트랜잭션 적용한다는 사실은 코드에 남아있음
+- -> 위임을 통해 기능을 사용하는 코드는 아직 남아있음
+![](img/img_21.png)
+- -> 트랜잭션 기능은 비즈니스로직과 성격이 다르기 때문에 아예 그 적용 사실을 밖으로 분리할 수 있음 
+- 아래와 같이 부가기능 전부를 핵심 코드가 담긴 클래스에서 독립시킬 수 있음 (UserServiceTx와 UserServiceImpl 분리)
+![](img/img_22.png)
+- -> 핵심 기능 클래스는 부가기능 클래스 존재를 모름
+- -> 부가 기능이 핵심 기능을 사용하는 구조가 됨
+- --> 클라이언트가 핵심기능을 가진 클래스를 직접 사용해버리면 부가기능 적용 기회가 없어짐
+- -> 부가기능은 마치 자신이 핵심기능을 가진 클래스인것처럼 꾸며서, 
+- -> 클라이언트가 자신을 거쳐서 핵심기능을 사용하도록 만들어야하고,
+- --> 부가기능 자신도 같은 인터페이스를 구현한 뒤에 자신이 그 사이에 끼어들어야함.
+- --> 클라이언트는 인터페이스만 보고 사용하기 때문에, 자신은 핵심기능 가진 클래스 사용할 것이라 생각하지만,
+- -> 사실은 아래처럼 부가기능을 통해 핵심기능을 이용하게 되는 것임
+![](img/img_23.png)
+- 이렇게 마치 자신이 클라이언트가 사용하려고 하는 실제 대상인 것처럼 위장해서 클라의 요청을 받아주는 것을
+- -> **프록시**라고 부름
+- 프록시를 통해 최종적으로 요청을 위임받아 처리하는 실제 오브젝트를 타겟, 또는 실체(real subject)라고 부름
+- 아래는 클라이언트가 프록시를 통해 타겟을 사용하는 구조
+![](img/img_24.png)
+- **프록시의 특징**은 **타겟과 같은 인터페이스를 구현**했다는 것과, **프록시가 타겟을 제어할 수 있는 위치**에 있다는 것
+- **프록시 두가지 사용 목적**
+- -> 첫째는 클라이언트가 타겟에 접근하는 방법을 제어
+- -> 두번쨰는 타겟에 부가적인 기능을 부여
+- -> 두가지 모두 대리 오브젝트라는 개념의 프록시를 두고 사용한다는 점은 동일하지만 목적에 따라 다른 디자인 패턴으로 분류됨.
+
+#### 데코레이터 패턴
