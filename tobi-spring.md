@@ -4638,7 +4638,9 @@ class exTest {
 ```
 
 ##### Hello 인터페이스 구현한 프록시 만들어보기
+
 - 프록시에는 데코레이터 패턴을 적용해서 타깃에 부가기능을 추가.
+
 ```java
 public class HelloUppercase implements Hello {
     Hello hello; // 다른 프록시 추가할 수도 있으므로 인터페이스로 접근
@@ -4663,50 +4665,56 @@ public class HelloUppercase implements Hello {
     }
 }
 ```
+
 - 위 프록시는 프록시 적용의 일반적인 문제점 두가지를 갖고 있음
 - 인터페이스의 모든 메소드 구현해 위임하도록 코드 만들어야하고, 부가기능이 모든 메소드에 중복되서 나타남
 
-
 #### 다이나믹 프록시 적용
+
 - 클래스로 만든 프록시인 HelloUppercase를 다이나믹 프록시를 이용해 만들어보기.
-![](img/img_27.png)
+  ![](img/img_27.png)
 - **다이내믹 프록시**는 **프록시 팩토리에 의해 런타임 시 다이내믹하게 만들어지는 오브젝트**
 - 다이나믹 프록시 오브젝트는 타깃의 인터페이스와 같은 타입으로 만들어짐
-- -> 클라이언트는 다이내믹 프록시 오브젝트를 타깃 인터페이스를 통해 사용할 수 있음. 
+- -> 클라이언트는 다이내믹 프록시 오브젝트를 타깃 인터페이스를 통해 사용할 수 있음.
 - -> 팩토리 사용하기 떄문에, 프록시를 만들 때 인터페이스 모두 구현하면서 클래스 정의하지 않아도 됨!
 - -> **프록시 팩토리**에게 **인터페이스 정보만 제공**해주면 해당 인터페이스를 구현한 클래스의 오브젝트를 자동으로 만들어줌..
 - 다이나믹 프록시가 인터페이스 구현 클래스의 오브젝트는 만들어주지만, 프록시로서 필요한 **부가기능 제공 코드는 직접 작성**해야함.
-- **프록시의 부가기능**은 프록시 오브젝트와 독립적으로 **InvocationHandler를 구현한 오브젝트에 담음** 
+- **프록시의 부가기능**은 프록시 오브젝트와 독립적으로 **InvocationHandler를 구현한 오브젝트에 담음**
 
-##### InvocationHandler 인터페이스 
+##### InvocationHandler 인터페이스
+
 - InvocationHandler 인터페이스는 다음과 같은 메소드 한 개만 가진 간단한 인터페이스
 - 프로시의 부가기능을 담을 목적으로 사용
+
 ```
 public Obejct invoke(Object proxy, Method mehtod, Object[] args)
 ```
+
 - invoke() 메소드는 리플렉션의 Method 인터페이스를 파라미터로 받음
 - 메소드를 호출할 때 전달되는 파라미터도 arges 받음
-- **다이내믹 프록시 오브젝트는 클라이언트의 모든 요청을 리플렉션 정보로 변환**해서 
+- **다이내믹 프록시 오브젝트는 클라이언트의 모든 요청을 리플렉션 정보로 변환**해서
 - **InvocationHandler 구현 오브젝트의 invoke() 메소드로 넘기는 것**.
-- -> 타깃 인터페이스의 모든 메소드 요청이 하나의 메소드로 집중되어 중복 기능을 효과적으로 제공할 수 있음. 
+- -> 타깃 인터페이스의 모든 메소드 요청이 하나의 메소드로 집중되어 중복 기능을 효과적으로 제공할 수 있음.
 - 각 메소드 요청을 어떻게 처리할지 결정하기
-- -> 리플렉션으로 메소드와 파라미터 정보를 모두 갖고 있으므로 타깃 오브젝트의 메소드를 호출하게 할수도 있음 
+- -> 리플렉션으로 메소드와 파라미터 정보를 모두 갖고 있으므로 타깃 오브젝트의 메소드를 호출하게 할수도 있음
 - -> InvocationHandler 구현 오브젝트가 타깃 오브젝트 레퍼런스를 갖고 있다면 리플렉션을 이용해 간단히 위임 코드를 만들어낼 수 있음.
-![](img/img_28.png)
+  ![](img/img_28.png)
 - Hello 인터페이스를 제공하면서 프록시 팩토리에게 다이나믹 프록시를 만들어달라고 요청하면 Hello 인터페이스의 모든 메소드를 구현한 오브젝트를 생성해줌
-- InvocationHandler 인터페이스를 구현한 오브젝트를 제공해주면 **다이나믹 프록시가 받는 모든 요청을 InvocationHandler의 invoke() 메소드로 보내줌**. 
-- Hello 인터페이스의 메소드가 아무리 많더라도 invoke() 메소드 하나로 처리할 수 있음. 
+- InvocationHandler 인터페이스를 구현한 오브젝트를 제공해주면 **다이나믹 프록시가 받는 모든 요청을 InvocationHandler의 invoke() 메소드로 보내줌**.
+- Hello 인터페이스의 메소드가 아무리 많더라도 invoke() 메소드 하나로 처리할 수 있음.
 - 다이나믹 프록시 만들어보기
 - 먼저 다이나믹 프록시로부터 메소드 호출 정보를 받아 처리하는 InvocationHandler 만들기
+
 ##### InvocationHandler 구현 클래스 만들기
+
 ```java
-public class UppercaseHandler implements InvocationHandler { 
+public class UppercaseHandler implements InvocationHandler {
     Hello target;
-    
-    public UppercaseHandler(Hello target){
+
+    public UppercaseHandler(Hello target) {
         this.target = target;
     }
-    
+
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
         String ret = (String) method.invoke(target, args); //타겟으로 위임. 인터페이스으 모든 메소드 호출에 적용됨
@@ -4714,48 +4722,180 @@ public class UppercaseHandler implements InvocationHandler {
     }
 }
 ```
+
 - 다이나믹 프록시가 클라이언트로부터 받는 모든 요청은 InvocationHandler 구현 클래스의 invoke() 메소드로 전달됨
 - 다이나믹 프록시를 통해 요청이 전달되면 리플렉션 API를 이용해 타깃 오브젝트의 메소드를 호출.
 - -> 타깃 오브젝트의 메소드 호출이 끝났으면 프록시의 부가기능을 수행하고 결과 리턴
 - -> 리턴값은 다이내믹 프록시가 받아서 최종적으로 클라이언트에게 전달됨
+
 ##### 다이나믹 프록시 만들기
+
 - InvocationHandler를 사용하고 Hello 인터페이스를 구현하는 프록시를 만들기
 - 다이나믹 프록시의 생성은 Proxy 클래스의 newProxyInstance() 스태틱 팩토리 메소드를 이용하면 됨
 
 ```java
 class ex {
-  // 생성된 다이나믹 프록시 오브젝트는 Hello 구현하고 있으므로 타입 캐스팅 안전 
-  Hello proxiedHello = (Hello) Proxy.newProxyInstance(
-          getClass().getClassLoader(), // 동적으로 생성되는 다이나믹 프록시 클래스의 로딩에 사용할 클래스 로드
-          new Class[]{Hello.class}, // 구현할 인터페이스
-          new UppercaseHandler(new HelloTarget())); //부가기능과 위임코드를 담은 InvocationHandler
+    // 생성된 다이나믹 프록시 오브젝트는 Hello 구현하고 있으므로 타입 캐스팅 안전 
+    Hello proxiedHello = (Hello) Proxy.newProxyInstance(
+            getClass().getClassLoader(), // 동적으로 생성되는 다이나믹 프록시 클래스의 로딩에 사용할 클래스 로드
+            new Class[]{Hello.class}, // 구현할 인터페이스
+            new UppercaseHandler(new HelloTarget())); //부가기능과 위임코드를 담은 InvocationHandler
 }
 ```
+
 - 첫 번째 파라미터는 클래스 로더를 제공 -> 다이나믹 프록시가 정의되는 **클래스 로더를 지정**
 - 두 번째 파라미터는 다이나믹 프록시가 구현해야할 인터페이스 -> 한 번에 하나 이상 인터페이스 구현 가능
 - 세 번쨰 파라미터는 부가기능과 위임 관련 코드를 담고 있는 InvocationHandler 구현 오브젝트 제공
 
 #### 다이나믹 프록시의 장점 및 확장
+
 - 메소드가 추가되어도 다이나믹 프록시 사용 코드는 추가 작성할 것이 없음. -> 메소드는 오브젝트 생성시 자동 포함되고 부가기능은 invoke()로 처리되기 때문
 - InvocationHanlder 방식의 장점은 타깃에 종류에 상관없이 적용 가능하다는 것. -> 리플렉션의 Method 인터페이스를 이용해 메소드 호출하는 것이기 때문
 - ex) 메소드의 이름으로 invoke() 메소드의 조건 추가
+
 ```java
 class ex {
     public Obejct invoke(Object proxy, Method method, Object[] args) throws Throwable {
-         Object ret = method.invoke(target, args);
-         if(ret instanceof STring && method.getName().startsWith("say")){ // 메소드 이름으로 조건 추가
-             return ((String)ret).toUpperCase();
-         }else{
-             return ret; 
-         }
+        Object ret = method.invoke(target, args);
+        if (ret instanceof STring && method.getName().startsWith("say")) { // 메소드 이름으로 조건 추가
+            return ((String) ret).toUpperCase();
+        } else {
+            return ret;
+        }
     }
 }
 ```
 
 ### 다이나믹 프록시를 이용한 트랜잭션 부가기능
+
 - UserServiceTx를 다이나믹 프록시 방식으로 변경해보기
 - UserServiceTx는 서비스 인터페이스의 메소드를 모두 구현해야하고, 트랜잭션이 필요한 메소드마다 트랜잭션 처리 코드가 중복됨
+- -> 트랜잭션 부가기능 제공하는 다이나믹 프록시가 효과적 -> 다이나믹 프록시와 연동해 트랜잭션 기능 부가해주는 InvocationHandler하나만 정의하면 되기 때문
 
-#### 트랜잭션 InvocationHanlder 
+#### 트랜잭션 InvocationHanlder
+
 - 트랜잭션 부가기능을 가진 핸들러 코드
-- 
+
+```java
+public class TransactionHandler implements InvocationHandler {
+    private Object target; //부가기능을 제공할 타겟 오브젝트
+    private PlatformTransactionManager transactionManager; //트랜잭션 기능을 제공할 트랜잭션 매니저
+    private String pattern; // 트랜잭션을 적용할 메소드 이름의 패턴
+
+    public void setTarget(Object target) {
+        this.target = target;
+    }
+
+    public void setTransactionManager(PlatformTransactionManager transactionManager) {
+        this.transactionManager = transactionManager;
+    }
+
+    public void setPattern(String pattern) {
+        this.pattern = pattern;
+    }
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        if (method.getName().startsWith(pattern)) { // 트랜잭션 적용 대산 메소드 선별
+            return invokeInTransaction(method, args);
+        } else {
+            return method.invoke(target, args);
+        }
+    }
+
+    private Object invokeInTransaction(Method method, Object[] args) throws Throwable {
+        TransactionStatus status =
+                this.transactionManager.getTransaction(new DefaultTransactionDefinition());
+        try {
+            Object ret = method.invoke(target, args);
+            this.transactionManager.commit(status);
+            return ret;
+        } catch (InvocationTargetException e) { // 예외 주의 !
+            this.transactionManager.rollback(status);
+            throw e.getTargetException();
+        }
+    }
+}
+```
+
+- 요청할 타깃을 DI로 제공받기
+- 타깃 타입 Object로 선언하여 트랜잭션 필요한 어떤 타깃 오브젝트에도 적용 가능
+- 차이점은 롤백 적용 예외에서 **InvocationTargetException**을 잡도록 해야 한다는 점.
+- 리플렉션 메소드인 Method.invoke()를 이용해 타깃 오브젝트의 메소드를 호출할 때는
+- -> **타깃 오브젝트에서 발생하는 예외가 InvocationTargetException으로 한 번 포장돼서 전달**됨
+- -> InvocationTargetException으로 받은 후 getTargetException()으로 중첩되어 있는 예외를 가져와야함.
+
+#### TransactionHandler와 다이내믹 프록시를 이용하는 테스트
+```java
+class exTest {
+    @Test
+    public void upgradeAllOrNothing() throws Exception {
+      //..
+        TransactionHandler txHandler = new TransactionHandler(); //InvocationHandler구현 클래스 생성
+        txHandler.setTarget(testUserService); //타겟 설정
+        txHandler.setTransactionManager(transacionManager);
+        txHandler.setPattern("upgradeLevels");
+
+        UserService txUserService = (UserService) Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class[]{UserService.class},
+                txHandler); //UserService 인터페이스 타입의 다이내믹 프록시 생성
+        //..
+    }
+}
+```
+
+### 다이나믹 프록시를 위한 팩토리빈
+- TransactionHandler와 다이나믹 프록시를 스프링의 DI를 통해 사용할 수 있도록 만들기...
+- 다이나믹 프록시는 일반적인 스프링의 빈으로 등록할 방법이 없다는 것이 문제점 ..
+- -> **스프링 빈**은 기본적으로 **클래스 이름과 프로퍼티로 정의**됨
+- -> 스프링은 지정된 클래스 이름을 가지고 **리플렉션을 이용해서 해당 클래스의 오브젝트**를 만듬
+- -> **클래스의 이름**을 갖고 있다면 다음과 같은 방법으로 새로운 오브젝트를 생성할 수 있음
+- -> **Class의 newInstance()는 해당 클래스의 파라미터가 없는 생성자를 호출**하고, 그 결과 생성되는 오브젝트를 돌려주는 리플렉션 API임.
+```
+Date now = (Date) Class.forName("java.util.Date").newInstance(); // 해당 클래스의 파라미터가 없는 생성자를 호출 
+```
+- -> 스프링은 내부적으로 리플랙션 API를 이용해서 빈 정의에 나오는 클래스 이름을 가지고 빈 오브젝트를 생성함
+- 사전에 프록시 클래스 정보를 미리 알아내서 스프링의 빈에 정의할 방법이 없음. 
+- -> **다이나믹 프록시는 위의 빈 생성 과정과는 다르게, Proxy 클래스의 newProxyInstance()라는 스태틱 팩토리 메소드를 통해서만** 만들 수 있음.
+
+#### 팩토리 빈
+- 사실 스프링은 위처럼 클래스정보를 가지고 디폴트 생성자를 통해 오브젝트를 만드는 방법 외에도 빈을 만들 수 있는 여러가지 방법을 제공함.
+- 대표적으로 **팩토리 빈을 이용한 빈 생성 방법**을 들 수 있음. 
+- 팩토리 빈이란 스프링을 대신해서 오브젝트의 생성로직을 담당하도록 만들어진 특별한 빈
+- 팩토리 빈을 만드는 방법 중 가장 간단한 방법은 스프링의 FactoryBean이라는 인터페이스 구현하는 것.
+```java
+package org.springframework.beans.factory;
+
+public interface FactoryBean<T>{
+    T getObject() throws Exception; // 빈오브젝트를 생성해서 돌려줌
+    Class<? extends T> getObjectType(); // 생성되는 오브젝트의 타입을 알려줌
+    boolean isSingleton(); // getObject()가 돌려주는 오브젝트가 항상 같은 싱글통 오브젝트인지 알려줌. 
+}
+```
+- **FactoryBean 인터페이스를 구현한 클래스를 스프링의 빈으로 등록하면 팩토리 빈으로 동작**.
+
+##### 팩토리빈 학습 테스트
+- 생성자가 private하여 스프링이 빈 오브젝트로 등록하지 못하는 상황
+```java
+public class Message {
+    String text;
+    
+    private Message(String text){ //생성자가 private으로 선언되어 있음 -> 스프링 빈 오브젝트로 생성 불가..
+        this.text = text;
+    }
+    
+    public String getText(){
+        return text;
+    }
+    
+    public static Message newMessage(String text){ //생성자 대신 스태틱 팩토리 메소드를 통해서만 오브젝트 생성 가능
+        return new Message(text);
+    }
+}
+```
+- 사실 스프링은 private 생성자를 가진 클래스도 빈으로 등록해주면 리플렉션을 이용해 오브젝트를 만들어줌.
+- 리플렉션은 private 으로 선언된 접근 규약을 위반할 수 있는 강력한 기능이 있음
+- -> 하지만 위험하므로 private 생성자 클래스 빈으로 등록은 지양, 올바르게 동작하지 않을 가능성 있음. 
+- -> Message 클래스의 오브젝트를 생성해주는 팩토리 빈 클래스 만들기 
+

@@ -15,6 +15,7 @@ import org.user.domain.User;
 
 import javax.sql.DataSource;
 import java.io.BufferedInputStream;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -193,9 +194,19 @@ public class UserServiceTest {
         testUserService.setTransactionManager(transacionManager);
         testUserService.setMailSender(mailSender);
 
-        UserServiceTx txUserService = new UserServiceTx();
-        txUserService.setTransactionManager(transacionManager);
-        txUserService.setUserService(txUserService);
+//        UserServiceTx txUserService = new UserServiceTx();
+//        txUserService.setTransactionManager(transacionManager);
+//        txUserService.setUserService(txUserService);
+        TransactionHandler txHandler = new TransactionHandler();
+        txHandler.setTarget(testUserService); //타겟 설정
+        txHandler.setTransactionManager(transacionManager);
+        txHandler.setPattern("upgradeLevels");
+
+        UserService txUserService = (UserService) Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class[]{UserService.class},
+                txHandler); //UserService 인터페이스 타입의 다이내믹 프록시 생성
+        
 
         userDao.deleteAll();
         for (User user : users) {
@@ -262,7 +273,7 @@ public class UserServiceTest {
         assertThat(mailMessages.get(0).getTo()[0], is(users.get(1).getEmail()));
         assertThat(mailMessages.get(1).getTo()[0], is(users.get(3).getEmail()));
 
-        BufferedInputStream
+
     }
 
     private void checkUserAndLevel(User updated, String expectedId, Level expectedLevel) {
