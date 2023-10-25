@@ -4898,4 +4898,29 @@ public class Message {
 - 리플렉션은 private 으로 선언된 접근 규약을 위반할 수 있는 강력한 기능이 있음
 - -> 하지만 위험하므로 private 생성자 클래스 빈으로 등록은 지양, 올바르게 동작하지 않을 가능성 있음. 
 - -> Message 클래스의 오브젝트를 생성해주는 팩토리 빈 클래스 만들기 
+```java
+public class MessageFactoryBean implements FactoryBean<Message> {
+    String text;
+    public void setText(String text) { // 오브젝트 생성할 때 필요한 정보를 팩토리 빈의 프로퍼티로 설정해서 대신 DI 받을 수 있게 함.
+        this.text = text;              // 주입된 정보는 오브젝트 생성 중에 사용된다..
+    }
+    @Override
+    public Message getObject() throws Exception { // 실제 빈으로 사용될 오브젝트를 직접 생성한다. 
+        return Message.newMessage(this.text);     // 코드를 이용하기 때문에 복잡한 방식의 오브젝트 생성과 초기화 작업도 가능
+    }
+    @Override
+    public Class<?> getObjectType() {
+        return null;
+    }
+    @Override
+    public boolean isSingleton() {  // getObject() 메소드가 돌려주는 오브젝트가 싱글톤이지 알려줌
+        return false;               // 이 팩토리 빈은 매번 요청할 때마다 새로운 오브젝트를 만들므로 false로 설정
+    }                               // -> 팩토리 빈의 동작방식에 관한 설정. 만들어진 빈 오브젝트는 싱글톤으로 스프링이 관리해줄 수 있음..
+}
+```
+- -> **FactoryBean인터페이스를 구현한 클래스가 빈의 클래스로** 지정되면 
+- -> **스프링**이 팩토리 빈 클래스의 오브젝트의 getObject()를 이용해 오브젝트를 가져오고, 리턴된 **오브젝트를 빈으로 사용**함
+- -> **팩토리빈은 빈 오브젝트를 생성하는 이 과정에서만 사용됨 !**
 
+#### 팩토리빈의 설정 방법
+- 팩토리 빈의 설정을 인반 빈과 다르지 않음. 

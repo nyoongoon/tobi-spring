@@ -1,5 +1,7 @@
 package org.user.dao;
 
+import org.learningtest.jdk.Message;
+import org.learningtest.jdk.MessageFactoryBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -10,7 +12,7 @@ import org.user.service.UserServiceTx;
 import javax.sql.DataSource;
 
 @Configuration
-public class DaoFactory {
+public class BeanConfig {
     @Bean
     public DataSource dataSource() {
         SimpleDriverDataSource dataSource = new SimpleDriverDataSource();
@@ -65,5 +67,12 @@ public class DaoFactory {
         JavaMailSenderImpl mailSender = new JavaMailSenderImple();
         mailSender.setHost("mail.server.com");
         return mailSender;
+    }
+
+    @Bean
+    public MessageFactoryBean message(){
+        MessageFactoryBean messageFactoryBean = new MessageFactoryBean();
+        messageFactoryBean.setText("Factory Bean");
+        return messageFactoryBean;
     }
 }
