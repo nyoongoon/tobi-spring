@@ -4826,11 +4826,12 @@ public class TransactionHandler implements InvocationHandler {
 - -> InvocationTargetException으로 받은 후 getTargetException()으로 중첩되어 있는 예외를 가져와야함.
 
 #### TransactionHandler와 다이내믹 프록시를 이용하는 테스트
+
 ```java
 class exTest {
     @Test
     public void upgradeAllOrNothing() throws Exception {
-      //..
+        //..
         TransactionHandler txHandler = new TransactionHandler(); //InvocationHandler구현 클래스 생성
         txHandler.setTarget(testUserService); //타겟 설정
         txHandler.setTransactionManager(transacionManager);
@@ -4846,81 +4847,249 @@ class exTest {
 ```
 
 ### 다이나믹 프록시를 위한 팩토리빈
+
 - TransactionHandler와 다이나믹 프록시를 스프링의 DI를 통해 사용할 수 있도록 만들기...
 - 다이나믹 프록시는 일반적인 스프링의 빈으로 등록할 방법이 없다는 것이 문제점 ..
 - -> **스프링 빈**은 기본적으로 **클래스 이름과 프로퍼티로 정의**됨
 - -> 스프링은 지정된 클래스 이름을 가지고 **리플렉션을 이용해서 해당 클래스의 오브젝트**를 만듬
 - -> **클래스의 이름**을 갖고 있다면 다음과 같은 방법으로 새로운 오브젝트를 생성할 수 있음
 - -> **Class의 newInstance()는 해당 클래스의 파라미터가 없는 생성자를 호출**하고, 그 결과 생성되는 오브젝트를 돌려주는 리플렉션 API임.
+
 ```
 Date now = (Date) Class.forName("java.util.Date").newInstance(); // 해당 클래스의 파라미터가 없는 생성자를 호출 
 ```
+
 - -> 스프링은 내부적으로 리플랙션 API를 이용해서 빈 정의에 나오는 클래스 이름을 가지고 빈 오브젝트를 생성함
-- 사전에 프록시 클래스 정보를 미리 알아내서 스프링의 빈에 정의할 방법이 없음. 
+- 사전에 프록시 클래스 정보를 미리 알아내서 스프링의 빈에 정의할 방법이 없음.
 - -> **다이나믹 프록시는 위의 빈 생성 과정과는 다르게, Proxy 클래스의 newProxyInstance()라는 스태틱 팩토리 메소드를 통해서만** 만들 수 있음.
 
 #### 팩토리 빈
+
 - 사실 스프링은 위처럼 클래스정보를 가지고 디폴트 생성자를 통해 오브젝트를 만드는 방법 외에도 빈을 만들 수 있는 여러가지 방법을 제공함.
-- 대표적으로 **팩토리 빈을 이용한 빈 생성 방법**을 들 수 있음. 
+- 대표적으로 **팩토리 빈을 이용한 빈 생성 방법**을 들 수 있음.
 - 팩토리 빈이란 스프링을 대신해서 오브젝트의 생성로직을 담당하도록 만들어진 특별한 빈
 - 팩토리 빈을 만드는 방법 중 가장 간단한 방법은 스프링의 FactoryBean이라는 인터페이스 구현하는 것.
+
 ```java
 package org.springframework.beans.factory;
 
-public interface FactoryBean<T>{
+public interface FactoryBean<T> {
     T getObject() throws Exception; // 빈오브젝트를 생성해서 돌려줌
+
     Class<? extends T> getObjectType(); // 생성되는 오브젝트의 타입을 알려줌
+
     boolean isSingleton(); // getObject()가 돌려주는 오브젝트가 항상 같은 싱글통 오브젝트인지 알려줌. 
 }
 ```
+
 - **FactoryBean 인터페이스를 구현한 클래스를 스프링의 빈으로 등록하면 팩토리 빈으로 동작**.
 
 ##### 팩토리빈 학습 테스트
+
 - 생성자가 private하여 스프링이 빈 오브젝트로 등록하지 못하는 상황
+
 ```java
 public class Message {
     String text;
-    
-    private Message(String text){ //생성자가 private으로 선언되어 있음 -> 스프링 빈 오브젝트로 생성 불가..
+
+    private Message(String text) { //생성자가 private으로 선언되어 있음 -> 스프링 빈 오브젝트로 생성 불가..
         this.text = text;
     }
-    
-    public String getText(){
+
+    public String getText() {
         return text;
     }
-    
-    public static Message newMessage(String text){ //생성자 대신 스태틱 팩토리 메소드를 통해서만 오브젝트 생성 가능
+
+    public static Message newMessage(String text) { //생성자 대신 스태틱 팩토리 메소드를 통해서만 오브젝트 생성 가능
         return new Message(text);
     }
 }
 ```
+
 - 사실 스프링은 private 생성자를 가진 클래스도 빈으로 등록해주면 리플렉션을 이용해 오브젝트를 만들어줌.
 - 리플렉션은 private 으로 선언된 접근 규약을 위반할 수 있는 강력한 기능이 있음
-- -> 하지만 위험하므로 private 생성자 클래스 빈으로 등록은 지양, 올바르게 동작하지 않을 가능성 있음. 
-- -> Message 클래스의 오브젝트를 생성해주는 팩토리 빈 클래스 만들기 
+- -> 하지만 위험하므로 private 생성자 클래스 빈으로 등록은 지양, 올바르게 동작하지 않을 가능성 있음.
+- -> Message 클래스의 오브젝트를 생성해주는 팩토리 빈 클래스 만들기
+
 ```java
 public class MessageFactoryBean implements FactoryBean<Message> {
     String text;
+
     public void setText(String text) { // 오브젝트 생성할 때 필요한 정보를 팩토리 빈의 프로퍼티로 설정해서 대신 DI 받을 수 있게 함.
         this.text = text;              // 주입된 정보는 오브젝트 생성 중에 사용된다..
     }
+
     @Override
     public Message getObject() throws Exception { // 실제 빈으로 사용될 오브젝트를 직접 생성한다. 
         return Message.newMessage(this.text);     // 코드를 이용하기 때문에 복잡한 방식의 오브젝트 생성과 초기화 작업도 가능
     }
+
     @Override
     public Class<?> getObjectType() {
         return null;
     }
+
     @Override
     public boolean isSingleton() {  // getObject() 메소드가 돌려주는 오브젝트가 싱글톤이지 알려줌
         return false;               // 이 팩토리 빈은 매번 요청할 때마다 새로운 오브젝트를 만들므로 false로 설정
     }                               // -> 팩토리 빈의 동작방식에 관한 설정. 만들어진 빈 오브젝트는 싱글톤으로 스프링이 관리해줄 수 있음..
 }
 ```
-- -> **FactoryBean인터페이스를 구현한 클래스가 빈의 클래스로** 지정되면 
+
+- -> **FactoryBean인터페이스를 구현한 클래스가 빈의 클래스로** 지정되면
 - -> **스프링**이 팩토리 빈 클래스의 오브젝트의 getObject()를 이용해 오브젝트를 가져오고, 리턴된 **오브젝트를 빈으로 사용**함
 - -> **팩토리빈은 빈 오브젝트를 생성하는 이 과정에서만 사용됨 !**
 
 #### 팩토리빈의 설정 방법
-- 팩토리 빈의 설정을 인반 빈과 다르지 않음. 
+
+- 팩토리 빈의 설정을 인반 빈과 다르지 않음.
+
+```java
+
+@Configuration
+public class Config {
+    @Bean
+    public MessageFactoryBean message() {
+        MessageFactoryBean messageFactoryBean = new MessageFactoryBean();
+        messageFactoryBean.setText("Factory Bean");
+        return messageFactoryBean;
+    }
+}
+```
+
+```java
+class exTests {
+    @Autowired
+    ApplicationContext context;
+
+    @Test
+    public void getMessageFromFactoryBean() {
+        Object message = context.getBean("message"); //빈설정 메소드에는 팩토리빈을 반환하도록 해누었지만, 반환되는것은 팩토리빈의 getObject() 리턴 오브젝트!
+        assertThat(message.getClass()).isEqualTo(Message.class);
+        assertThat(((Message) message).getText()).isEqualTo("Factory Bean");
+    }
+}
+```
+
+- message 오브젝트의 타입은 @Bean에 정릐해둔 MessageFactoryBean이 아니라,
+- MessageFactoryBean이.getObject() 리턴 타입인 Message 타입!
+- -> FactoryBean 인터페이스를 구현한 클래스를 스프링 빈으로 만들어두면 getObject()라는 메소드가 생성해주는 오브젝트가
+- -> 실제 빈의 오브젝트로 대치된다는 사실을 알 수 있음.
+- 팩토리빈 자체를 가져오고 싶은 경우 &를 빈이름 앞에 붙여주면 패곹리 빈 자체 돌려줌
+
+```java
+import org.learningtest.jdk.MessageFactoryBean;
+
+class exTest {
+    @Test
+    public void getFactoryBean() throws Exception {
+        Object factory = context.getBean("&message");
+        assertThat(factory, is(MessageFactoryBean.class));
+    }
+}
+```
+
+#### 다이내믹 프록시를 만들어주는 팩토리 빈
+
+- Proxy의 newProxyInstance() 메소드를 통해서만 생성이 가능한 다이내믹 프록시 오브젝트는 일반적인 방법으로는 스프링의 빈으로 등록할 수 없음
+- 대신 팩토리 빈을 사용하면 다이내믹 프록시 오브젝트를 스프링 빈으로 만들어줄 수 있음.
+  ![](img/img_29.png)
+- 스프링 빈에는 팩토리 빈과 UserServiceImple만 빈으로 등록함.
+- 팩토리빈은 다이내믹 프록시가 위임할 타깃 오브젝트인 UserServiceImpl에 대한 레퍼런스를 프로퍼티를 통해 DI 받아둬야함
+- 다이내믹 프록시와 함께 생성할 TransactionHandler에게 타깃 오브젝트를 전달해줘야함.
+
+#### 트랜잭션 프록시 팩토리 빈
+
+- TransactionHandler를 이용하는 다이내믹 프록시를 생성하는 팩토리 빈 클래스
+
+```java
+public class TxProxyFactoryBean implements FactoryBean<Object> { //생성할 오브젝트 타입을 지정할 수도 있지만 범용적으로 하기 위해 Object로
+    Object target;
+    PlatformTransactionManager transactionManager; //TransactionHandler를 생성할 때 필요
+    String pattern;
+    Class<?> serviceInterface; //다이나믹 프록시를 생성할 때 필요. UserService외의 인터페이스를 가진 타깃에도 적용.
+
+    public void setTarget(Object target) {
+        this.target = target;
+    }
+
+    public void setTransactionManager(PlatformTransactionManager transactionManager) {
+        this.transactionManager = transactionManager;
+    }
+
+    public void setPattern(String pattern) {
+        this.pattern = pattern;
+    }
+
+    public void setServiceInterface(Class<?> serviceInterface) {
+        this.serviceInterface = serviceInterface;
+    }
+
+    //FactoryBean 인터페이스 구현 메소드
+    @Override
+    public Object getObject() throws Exception { //DI 받은 정보를 이용해서 TransactionHandler를 사용하는 다이나믹 프록시를 생성
+        TransactionHandler txHanler = new TransactionHandler();
+        txHanler.setTarget(target);
+        txHanler.setTransactionManager(transactionManager);
+        txHanler.setPattern(pattern);
+        return Proxy.newProxyInstance( //Proxy의 스태틱 메소드로 프록시 생성
+                getClass().getClassLoader(),
+                new Class[]{serviceInterface},
+                txHanler);
+    }
+
+    @Override
+    public Class<?> getObjectType() {  //DI 받은 인터페이스 타입에 따라 달라짐
+        return serviceInterface;
+    }
+
+    @Override
+    public boolean isSingleton() { //싱글톤 빈이 아니라는 뜻이 아니라 getObject()가 매번 같은 오브젝트를 리턴하지 않는다는 의미!
+        return false;
+    }
+}
+```
+
+```java
+
+@Configuration
+class config {
+    //..
+    //    @Bean
+    //    public UserServiceTx userService (){
+    //        UserServiceTx userServiceTx = new UserServiceTx();
+    //        userServiceTx.setUserService(userServicImpl());
+    //        userServiceTx.setTransactionManager(transactionManager());
+    //    }
+    @Bean
+    public TxProxyFactoryBean userService() {
+        TxProxyFactoryBean txProxyFactoryBean = new TxProxyFactoryBean();
+        txProxyFactoryBean.setTarget(userServicImpl()); //핵심기능->핸들러의invoke()메소드에서 사용하기 위함
+        txProxyFactoryBean.setTransactionManager(transactionManager());
+        txProxyFactoryBean.setPattern("upgradeLevels");
+        txProxyFactoryBean.setServiceInterface(UserService.class); // 해당 타입으로 다이나믹 프록시를 생성하기 위해 주입시키는 인터페이스
+        return txProxyFactoryBean;
+    }
+}
+```
+
+- 해당 타입으로 다이나믹 프록시를 생성하기 위해 주입시키는 인터페이스는 Class<?>의 타입으로 set해줌
+
+#### 트랜잭션 프록시 팩토리 빈 테스트
+- 기존 테스트 코드 
+```java
+public class UserServiceTest {
+    @Autowired
+    private UserService UserService; // 이제 다이나믹 프록시가 DI 될 것임
+    //..
+    @Test
+    public void upgradeAllOrNothing() throws Exception {
+      UserService testUserService = new TestUserService(users.get(3).getId()); // 타겟
+      testUserService.setUserDao(this.userDao); // 수동 DI
+      testUserService.setTransactionManager(transacionManager);
+      testUserService.setMailSender(mailSender);
+      //.. testUserService 사용 중...
+    }
+}
+```
+- p.456

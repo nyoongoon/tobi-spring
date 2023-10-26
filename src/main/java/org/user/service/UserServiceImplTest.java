@@ -189,7 +189,7 @@ public class UserServiceTest {
 
     @Test
     public void upgradeAllOrNothing() throws Exception {
-        UserService testUserService = new TestUserService(users.get(3).getId());
+        UserService testUserService = new TestUserService(users.get(3).getId()); // 타겟
         testUserService.setUserDao(this.userDao); // 수동 DI
         testUserService.setTransactionManager(transacionManager);
         testUserService.setMailSender(mailSender);
@@ -197,12 +197,12 @@ public class UserServiceTest {
 //        UserServiceTx txUserService = new UserServiceTx();
 //        txUserService.setTransactionManager(transacionManager);
 //        txUserService.setUserService(txUserService);
-        TransactionHandler txHandler = new TransactionHandler();
+        TransactionHandler txHandler = new TransactionHandler(); // 핸들러 (부가기능 구현)
         txHandler.setTarget(testUserService); //타겟 설정
         txHandler.setTransactionManager(transacionManager);
         txHandler.setPattern("upgradeLevels");
 
-        UserService txUserService = (UserService) Proxy.newProxyInstance(
+        UserService txUserService = (UserService) Proxy.newProxyInstance( // 프록시
                 getClass().getClassLoader(),
                 new Class[]{UserService.class},
                 txHandler); //UserService 인터페이스 타입의 다이내믹 프록시 생성
