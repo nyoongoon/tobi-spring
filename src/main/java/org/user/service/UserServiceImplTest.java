@@ -4,6 +4,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
@@ -30,7 +31,10 @@ import static org.user.service.UserService.MIN_RECCOMEND_FOR_GOLD;
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(locations = "/org/user/dao/DaoFactory.java")
 public class UserServiceTest {
-    ㅋ
+
+    @Autowired
+    ApplicationContext context; // 팩토리 빈을 가져오려면 애플리케이션 컨텍스트가 필요함.
+
     @Autowired
     PlatformTransactionManager transacionManager;
     @Autowired
@@ -188,25 +192,31 @@ public class UserServiceTest {
     }
 
     @Test
+    @DirtiesContext
     public void upgradeAllOrNothing() throws Exception {
-        UserService testUserService = new TestUserService(users.get(3).getId()); // 타겟
+        TestUserService testUserService = new TestUserService(users.get(3).getId()); // 타겟
         testUserService.setUserDao(this.userDao); // 수동 DI
         testUserService.setTransactionManager(transacionManager);
         testUserService.setMailSender(mailSender);
 
-//        UserServiceTx txUserService = new UserServiceTx();
+//        UserServiceTx txUserService = new UserServiceTx(); // 직접 프록시 구현
 //        txUserService.setTransactionManager(transacionManager);
 //        txUserService.setUserService(txUserService);
-        TransactionHandler txHandler = new TransactionHandler(); // 핸들러 (부가기능 구현)
-        txHandler.setTarget(testUserService); //타겟 설정
-        txHandler.setTransactionManager(transacionManager);
-        txHandler.setPattern("upgradeLevels");
 
-        UserService txUserService = (UserService) Proxy.newProxyInstance( // 프록시
-                getClass().getClassLoader(),
-                new Class[]{UserService.class},
-                txHandler); //UserService 인터페이스 타입의 다이내믹 프록시 생성
-        
+//        TransactionHandler txHandler = new TransactionHandler(); // 핸들러 (부가기능 구현) //프록시팩토리사용
+//        txHandler.setTarget(testUserService); //타겟 설정
+//        txHandler.setTransactionManager(transacionManager);
+//        txHandler.setPattern("upgradeLevels");
+//
+//        UserService txUserService = (UserService) Proxy.newProxyInstance( // 프록시 직접 생성  --> DI로 받을 수도 있음
+//                getClass().getClassLoader(),
+//                new Class[]{UserService.class},
+//                txHandler); //UserService 인터페이스 타입의 다이내믹 프록시 생성
+
+        TxProxyFactoryBean txProxyFactoryBean = // 테스트를 위한 프록시 팩토리 가져오기
+                context.getBean("&userService", TxProxyFactoryBean.class); //팩토리 빈 자체 가져오기
+        txProxyFactoryBean.setTarget(testUserService);// 테스트용 타겟 주입
+        UserService txUserService = (UserService) txProxyFactoryBean.getObject();
 
         userDao.deleteAll();
         for (User user : users) {

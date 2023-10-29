@@ -5076,20 +5076,133 @@ class config {
 - 해당 타입으로 다이나믹 프록시를 생성하기 위해 주입시키는 인터페이스는 Class<?>의 타입으로 set해줌
 
 #### 트랜잭션 프록시 팩토리 빈 테스트
-- 기존 테스트 코드 
+
+- 기존 테스트 코드
+
 ```java
 public class UserServiceTest {
     @Autowired
     private UserService UserService; // 이제 다이나믹 프록시가 DI 될 것임
+
     //..
     @Test
     public void upgradeAllOrNothing() throws Exception {
-      UserService testUserService = new TestUserService(users.get(3).getId()); // 타겟
-      testUserService.setUserDao(this.userDao); // 수동 DI
-      testUserService.setTransactionManager(transacionManager);
-      testUserService.setMailSender(mailSender);
-      //.. testUserService 사용 중...
+        UserService testUserService = new TestUserService(users.get(3).getId()); // 타겟으로 지정해야함
+        testUserService.setUserDao(this.userDao); // 수동 DI
+        testUserService.setTransactionManager(transacionManager);
+        testUserService.setMailSender(mailSender);
+        //.. testUserService 사용 중...
     }
 }
 ```
-- p.456
+
+- 테스트를 하기 위해서 TestUserService 오브젝트를 타깃으로 사용해야하는데
+- 스프링 DI 설정에는 UserServiceImpl이 타겟으로 지정되어 있음,,
+
+```
+txProxyFactoryBean.setTarget(userServicImpl()); //핵심기능->핸들러의invoke()메소드에서 사용하기 위함
+```
+
+- -> 빈으로 등록된 TxProxyFactoryBean을 직접 가져와서 프록시 생성하기
+- -> 컨텍스트 설정 변경 사항이지만 트랜잭션 학습 테스트로 특별히 만든것이므로 @DirtiesContext를 등록해주기
+
+```java
+class exTest {
+    @Autowired
+    ApplicationContext context; // 팩토리 빈을 가져오려면 애플리케이션 컨텍스트가 필요함.
+
+    //..
+    @Test
+    @DirtiesContext
+    public void upgradeAllOrNothing() throws Exception {
+        TestUserService testUserService = new TestUserService(users.get(3).getId()); // 타겟
+        testUserService.setUserDao(this.userDao); // 수동 DI
+        testUserService.setTransactionManager(transacionManager);
+        testUserService.setMailSender(mailSender);
+
+//        UserServiceTx txUserService = new UserServiceTx(); // 직접 프록시 구현
+//        txUserService.setTransactionManager(transacionManager);
+//        txUserService.setUserService(txUserService);
+
+//        TransactionHandler txHandler = new TransactionHandler(); // 핸들러 (부가기능 구현) //프록시팩토리사용
+//        txHandler.setTarget(testUserService); //타겟 설정
+//        txHandler.setTransactionManager(transacionManager);
+//        txHandler.setPattern("upgradeLevels");
+//
+//        UserService txUserService = (UserService) Proxy.newProxyInstance( // 프록시
+//                getClass().getClassLoader(),
+//                new Class[]{UserService.class},
+//                txHandler); //UserService 인터페이스 타입의 다이내믹 프록시 생성
+
+        TxProxyFactoryBean txProxyFactoryBean = // 테스트를 위한 프록시 팩토리 가져오기
+                context.getBean("&userService", TxProxyFactoryBean.class); //팩토리 빈 자체 가져오기
+        txProxyFactoryBean.setTarget(testUserService);// 테스트용 타겟 주입
+        UserService txUserService = (UserService) txProxyFactoryBean.getObject(); //테스트 타겟 주입된 프록시
+
+        userDao.deleteAll();
+        for (User user : users) {
+            userDao.add(user);
+        }
+        try {
+            txUserService.upgradeLevels();
+            fail("TestUserServiceException expected"); // 예외 테스트이므로 정상종료라면 실패
+        } catch (TestUserServiceException e) {
+            //TestUserService가 던져주는 예외를 잡아서 계속 진행되도록 함.
+        }
+        checkLevelUpgraded(users.get(1), false);  // users.get(1)의 인스턴스는 레벨 업데이트 된 상태
+    }
+}
+```
+
+### 프록시 팩토리 빈 방식의 장점과 한계
+
+#### 프록시 팩토리 빈의 재사용
+
+- CoreService가 추가 되었을 때 기존 프록시 팩토리를 그대로 재사용 가능
+
+```java
+import org.springframework.context.annotation.Bean;
+import org.user.service.TxProxyFactoryBean;
+
+@Configuration
+class ex {
+  //..
+  @Bean
+  public CoreServiceImpl coreServiceTarget() {
+    CoreServiceImpl coreService = new CoreServiceImpl();
+    coreService.setCoreDao(coreDao());
+  }
+
+  @Bean
+  public TxProxyFactoryBean coreService(){
+      TxProxyFactoryBean txProxyFactoryBean = new TxProxyFactoryBean();
+      txProxyFactoryBean.setTarget(coreServiceTarget());
+      txProxyFactoryBean.setTransactionManager(transactionManager());
+      txProxyFactoryBean.setServiceInterface(CoreService.class);
+  }
+}
+```
+- 핵심기능 구현 클래스를 target빈으로 설정해주고, 프록시가 구현할 인터페이스를 넣어주면 됨
+![](img/img_30.png)
+
+#### 프록시 팩토리 빈 방식의 장점 
+- 기존 데코레이터 패턴이 적용된 프록시를 사용하면 많은 장점이 있는데도 활용어려운 두가지 문제점
+- 구현 프록시 클래스를 일일이 만들어야했음, 메소드에 부가기능 코드 중복 
+- -> 프록시 팩토리 빈으로 두가지 문제 해결
+- -> 다이나믹 프록시, 팩토리빈을 이용하여 구현 클래스를 일일이 만들지 않아도 됨
+- -> 핸들러 클래스를 생성하여 하나의 핸들러 메소드(invoke())를 구현하는 것으로 메소드 부가기능 해결
+- -> 프록시 Proxy.newProxyInstance()로 직접 생성 -> 팩토리 빈으로 자동 DI 가능 
+
+#### 프록시 팩토리 빈의 한계
+##### 한 번에 여러개의 클래스에 부가기능 X
+- 프록시를 통해 타깃에 부가기능을 제공하는 것은 메소드 단위로 일어나는 일 ! 
+- -> 하나의 클래스에 존재하는 여러개의 메소드에 부가기능을 한번제 제공하는 것은 가능 
+- -> 한번에 여러개의 클래스에 공통적인 부가기능을 제공하는 일은 지금까지의 방법으로는 불가능 ! 
+- (현재는 비슷한 프록시 팩토리 빈의 설정이 중복되는 것이 한계)
+##### 하나의 타깃에 여러 개의 부가기능 적용 X
+- 부가기능 마다 프록시 팩토리 빈 설정 코드가 추가됨 (서비스 클래스 x 부가기능 만큼 코드 증가)
+- -> 설정파일이 너무 복잡해지는것은 피하기 어려움 
+##### Handler 오브젝트가 프록시 팩토리 빈 개수 만듬 만들어짐.
+- TransactionHandler는 타깃 오브젝트를 갖고 있음.- > 타깃오브젝트가 달라지면 새로운 handler 오브젝트 만들어야함 
+- -> TransactionHandler 중복을 없애고 모든 타깃에 적용가능한 싱글톤 빈으로 만들 수는 없을까?.. 
+- 
