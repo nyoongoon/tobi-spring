@@ -29,7 +29,7 @@ public class TxProxyFactoryBean implements FactoryBean<Object> { //생성할 오
     //FactoryBean 인터페이스 구현 메소드
     @Override
     public Object getObject() throws Exception { //DI 받은 정보를 이용해서 TransactionHandler를 사용하는 다이나믹 프록시를 생성
-        TransactionHandler txHanler = new TransactionHandler();
+        TransactionHandler txHanler = new TransactionHandler(); //싱글톤이 아님.. 타겟 설정 필요..
         txHanler.setTarget(target);
         txHanler.setTransactionManager(transactionManager);
         txHanler.setPattern(pattern);

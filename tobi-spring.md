@@ -5193,7 +5193,7 @@ class ex {
 - -> 핸들러 클래스를 생성하여 하나의 핸들러 메소드(invoke())를 구현하는 것으로 메소드 부가기능 해결
 - -> 프록시 Proxy.newProxyInstance()로 직접 생성 -> 팩토리 빈으로 자동 DI 가능 
 
-#### 프록시 팩토리 빈의 한계
+#### 프록시 팩토리 빈의 한계 두가지..
 ##### 한 번에 여러개의 클래스에 부가기능 X
 - 프록시를 통해 타깃에 부가기능을 제공하는 것은 메소드 단위로 일어나는 일 ! 
 - -> 하나의 클래스에 존재하는 여러개의 메소드에 부가기능을 한번제 제공하는 것은 가능 
@@ -5203,6 +5203,60 @@ class ex {
 - 부가기능 마다 프록시 팩토리 빈 설정 코드가 추가됨 (서비스 클래스 x 부가기능 만큼 코드 증가)
 - -> 설정파일이 너무 복잡해지는것은 피하기 어려움 
 ##### Handler 오브젝트가 프록시 팩토리 빈 개수 만듬 만들어짐.
-- TransactionHandler는 타깃 오브젝트를 갖고 있음.- > 타깃오브젝트가 달라지면 새로운 handler 오브젝트 만들어야함 
+- TransactionHandler는 타깃 오브젝트를 갖고 있음.- > 타깃오브젝트가 달라지면 다른 팩토리빈에서 handler 오브젝트 만들어야함 
 - -> TransactionHandler 중복을 없애고 모든 타깃에 적용가능한 싱글톤 빈으로 만들 수는 없을까?.. 
+
+
+## 스프링의 프록시 팩토리 빈 
+### ProxyFactoryBean
+- 스프링은 일관된 방법으로 프록시를 만들 수 있게 도와주는 추상레이어 제공.
+- -> 생성된 프록시는 스프링의 빈으로 등록돼야함.
+- -> 스프링은 **프록시 오브젝트를 생성해주는 기술을 추상화한 팩토리빈**을 제공해줌.  
+- 스프링의 ProxyFactoryBean은 프록시를 생성해서 빈 오브젝트로 등록하게 해주는 팩토리 빈
+- 기존에 만들었떤 TxProxyBean과 달리, ProxyFactoryBean은 순수하게 프록시를 생성하는 작업만을 담당
+- -> 프록시를 통해 제공해줄 부가기능은 별도의 빈에 둘 수 있음. 
+#### MethodInterceptor -> 핸들러가 싱글톤으로 가능해짐 
+- InvocationHandler의 invoke() 메소드는 타깃 오브젝트에 대한 정보를 제공하지 않아 InvocationHandler를 구현한 클래스가 타깃을 알고 있어야함.
+- 반면에, **MethodInterceptor의 invoke()**는** ProxyFactoryBean으로부터 타깃 오브젝트에 대한 정보까지도 함꼐 제공 받음**.
+- -> **MethodInterceptor는 타깃에 독립적**으로 만들어질 수 있음 
+- -> MethodInterceptor 오브젝트는 **타깃이 다른 프록시에서 함께 사용**할 수 있고, **싱글톤빈**으로 등록 가능
+
+```java
+public class DymanicProxyTest {
+    @Test
+    public void simpleProxy(){ //JDK 다이나맥 프록시 생성
+        Hello proxiedHello = (Hello) Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class[] {Hello.class},
+                new UppercaseHandler(new HelloTarget())); // 기존엔 핸들러마다 타겟을 설정해줘야해서 싱글톤 불가했음
+    }
+
+    @Test
+    public void proxyFactoryBean(){
+        ProxyFactoryBean pfBean = new ProxyFactoryBean();
+        pfBean.setTarget(new HelloTarget()); // 타깃 설정
+        pfBean.addAdvice(new UppercaseAdvice()); // 부가기능을 담은 싱글톤 핸들러 어드바이스를 추가함. 여러개를 추가할 수도 있음.
+        Hello proxiedHello = (Hello) (Hello) pfBean.getObject(); //FactoryBean을 구현했으므로 getObject()로 생성된 프록시 가져옴
+        assertThat(proxiedHello.sayHello("Toby"), is("HELLO TOBY"));
+        assertThat(proxiedHello.sayHi("Toby"), is("HI TOBY"));
+        assertThat(proxiedHello.sayThankYou("Toby"), is("THANK YOU TOBY"));
+    }
+    
+    static class UppercaseAdvice implements MethodInterceptor { //ProxyFactoryBean에 addAdvice()에 넣으면 알아서 타겟의 정보도 전달됨.. 
+        @Override
+        public Object invoke(MethodInvocation invocation) throws Throwable {
+            String ret = (String) invocation.proceed(); // 리플렉션 Method와 달리 메소드 실행시 타겟오브젝트 전달 필요 없음
+            return ret.toUpperCase(); //부가기능 적용     // MethodInvocation은 메소드 정보와함께 타겟 오브젝트를 알고 있기 때문.. 
+        }
+//        @Override // InvocationHandler와 비교용
+//        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+//            String ret = (String) method.invoke(target, args); //타겟으로 위임. 인터페이스으 모든 메소드 호출에 적용됨
+//            return ret.toUpperCase(); // 부가기능 제공
+//        }
+    }
+}
+```
+- MethodInterceptor 구현 클래스를 ProxyFactoryBean의 addAdvice()에 넣으면 알아서 타겟의 정보도 전달됨.. -> 싱글톤 가능
+
+#### 어드바이스 : 타깃이 필요없는 순수한 부가기능
 - 

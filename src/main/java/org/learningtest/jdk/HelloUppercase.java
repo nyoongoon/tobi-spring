@@ -1,6 +1,6 @@
 package org.learningtest.jdk;
 
-public class HelloUppercase implements Hello {
+public class HelloUppercase implements Hello { // 부가기능 프록시
     Hello hello; // 다른 프록시 추가할 수도 있으므로 인터페이스로 접근
 
     public HelloUppercase(Hello hello) {

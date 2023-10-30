@@ -1,6 +1,6 @@
 package org.learningtest.jdk;
 
-public class HelloTarget implements Hello {
+public class HelloTarget implements Hello { // 타겟
     @Override
     public String sayHello(String name) {
         return "Hello " + name;
