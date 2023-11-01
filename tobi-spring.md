@@ -1558,13 +1558,14 @@ class ex {
 - -> 익명내부클래스를 사용한 전략 패턴 ==> **템플릿/콜백 패턴**
 
 ```java
-public class JdbcContext {
+public class JdbcContext { 
     private DataSource dataSource;
 
     public void setDataSource(DataSource dataSource) {
         this.dataSource = dataSource;
     }
 
+    //JdbcContext가 컨텍스트(템플릿), StatementStrategy가 콜백..
     public void workWithStatementStrategy(StatementStrategy stmt) throws SQLException {
         Connection c = null;
         PreparedStatement ps = null;
@@ -1676,7 +1677,7 @@ class ex {
 
 - cf)
 - 템플릿 : 어떤 목적을 위해 미리 만들어둔 모양이 있는 틀
-- -> 템플릿 메소드 패턴은 고정된 틀의 로직을 가지고 템플릿 메소드를 슈퍼클래스에 두고, 바뀌는 부분을 서브클래스의 메소드에 두는 구조.
+- -> cf)템플릿 메소드 패턴은 별개-> 고정된 틀의 로직을 가지고 템플릿 메소드를 슈퍼클래스에 두고, 바뀌는 부분을 서브클래스의 메소드에 두는 구조.
 - 콜백 : 다른 오브젝트로 전달되어서 **실행될 메소드를 보유한 오브젝트**.
 - -> 파라미터로 전달되지만 값을 참조하기 위한 것이 아니라, 특정 로직을 담은 메소드를 실행시키기 위해 사용.
 - -> **자바에선 메소드 자체를 파라미터로 전달할 방법이 없기 떄문**에 사용할 메소드를 갖고 있는 오브젝트를 전달 -> 펑서녈 오브젝트라고도 함
@@ -5259,4 +5260,67 @@ public class DymanicProxyTest {
 - MethodInterceptor 구현 클래스를 ProxyFactoryBean의 addAdvice()에 넣으면 알아서 타겟의 정보도 전달됨.. -> 싱글톤 가능
 
 #### 어드바이스 : 타깃이 필요없는 순수한 부가기능
-- 
+- MethodInterceptor로는 **메소드 정보와 함께 타깃 오브젝트가 담긴 MethodInvocation 오브젝트**가 전달됨. 
+- MethodInvocation은 타깃 오브젝트의 메소드 실행 기능이 있기 때문에 부가기능을 제공하는 데만 집중 가능
+
+##### MethodInterceptor & MethodInvocation
+- MethodInvocation은 일종의 콜백 오브젝트
+- **proceed()를 실행하면 타깃 오브젝트의 메소드를 내부적으로 실행**해주는 기능이 있음. 
+- MethodInvocation 구현클래스는 일종의 공유가능한 템플릿처럼 동작 
+- -> ProxyFactoryBean은 이렇게 작은 단위의 템플릿/콜백 구조를 응요해서 적용했기 때문에 템플릿 역할을 하는 MethodInterceptor을 싱글톤으로 두고 공유 가능
+- -> addAdvice()를 통해 ProxyFactoryBean에는 여러 개의 MethodInterceptor를 추가 가능. 
+- -> ProxyFactoryBean하나만으로 여러 개의 부가기능을 제공해주는 프록시를 만들 수 있다는 뜻.
+- -> 커스텀 프록시 팩토리 빈의 단점 중 하나였던 새로운 부가기능 추가할 때마다 프록시와 프록시 팩토리 빈도 추가해줘야했던 문제 해결
+
+###### 어드바이스?
+- 그런데, MethodInterceptor가 오브젝트를 추가하는 메소드 이름은 addMethodInterceptor가 아니라 addAdvice임.
+- -> MethodInterceptor는 Advice 인터페이스를 상속하고 있는 서브인터페이스이기 떄문.
+- -> MethodInterceptor처럼 **타깃 오브젝트에 적용하는 부가기능을 담은 오브젝트를 스프링에서는 어드바이스**라고 부름!!
+- -> my) 데코레이터와 어드바이스 차이점은?
+
+##### ProxyFactoryBean에서 프록시 인터페이스 제공 부분은?
+- JDK 다이나믹 프록시에서 프록시 오브젝트를 만들 때 필요했지만 ProxyFacotryBean을 적용한 후에 없어진 것이 있음
+- ProxyFactoryBean을 적용한 코드에는 프록시가 구현해야하는 Hello라는 인터페이스 제공 부분이 없음. 
+```
+  @Override
+  public Object getObject() throws Exception { //DI 받은 정보를 이용해서 TransactionHandler를 사용하는 다이나믹 프록시를 생성
+      TransactionHandler txHanler = new TransactionHandler(); //싱글톤이 아님.. 타겟 설정 필요..
+      txHanler.setTarget(target);
+      txHanler.setTransactionManager(transactionManager);
+      txHanler.setPattern(pattern);
+      return Proxy.newProxyInstance(
+              getClass().getClassLoader(),
+              new Class[]{serviceInterface},
+              txHanler);
+  }
+```
+- 스프링의 ProxyFactoryBean은 어떻게 인터페이스 타입을 제공받지도 않고 Hello 인터페이스를 구현한 프록시를 만들어 낼 수 있을까?
+- -> setInterfaces()를 통해 직접 지정도 가능하지만
+- -> 알려주지 않아도 타깃오브젝트가 구현하고 있는 인터페이스 정보를 알아냄. -> 알아낸 인터페이스를 모두 구현하는 프록시를 만들어줌. 
+- -> 타깃 오브젝트가 구현하는 인터페이스 중에서 일부만 프록시에 적용하기를 원한다면 인터페이스 정보를 직접 제공해도 됨.
+- 정리 : 어드바이스는 타깃 오브젝트에 종속되지 않은 순수한 부가기능을 담은 오브젝트
+
+#### 포인트컷 : 부가기능 적용 대상 메소드 선정 방법
+- 스프링의 ProxyFactoryBean과 MethodInterceptor를 사용하는 방식에서도 메소드 선정 기능을 넣을 수 있을까?
+- -> 불가능
+- -> MethodInterceptor 오브젝트는 여러 프록시가 공유해서 사용할 수 있음.
+- -> 그러기 위해서 MethodInterceptor오브젝트는 타깃 정보를 갖고 있지 않도록 만들었음 -> 싱글톤 가능 이유
+- -> 분리해주기
+- MethodInterceptor는 InvocationHandler와 다르게 프록시가 클라이언트로부터 받는 요청을 일일이 전달받을 필요는 없음.
+- -> MethodInterceptor에는 재사용 가능한 순수한 부가기능 제공 코드만 남겨주기.. 
+- -> 대신 **프록시에 부가기능 적용 메소드를 선택하는 기능 넣기**
+- -> 물론 메소드 선별 기능도 프록시로부터 다시 분리하는 편이 나음 
+- -> 메소드 선정하는 일도 일종의 교환가능한 알고리즘이므로 전략패턴을 적용할 수 있음. 
+
+##### 스프링 ProxyFactoryBean vs 커스텀 ProxyFactoryBean
+![](img/img_31.png)
+- 위에서의 문제는 부가기능을 가진 InvocationHandler가 **타깃과 메소드 선정 알고리즘 코드에 의존**하고 있다는 점
+- 만약 타깃이 다르고 메소드 선정방식이 다르다면 **InvocationHandler 오브젝트를 여러 프록시가 공유할 수 없음**
+- 타깃과 메소드 선정 알고리즘은 DI를 통해 분리할 수 있지만 한 번 빈으로 구성된 InvocationHandler오브젝트는
+- -> 오브젝트 차원에서 특정 타깃을 위한 프록시에 제한된다는 뜻. 
+- -> 그래서 InvocationHandler는 굳이 빈으로 등록하는 대신 TxProxyFacotryBean 내부에서 매번 생성하도록 만들었음.
+- -> **타깃 변경과 메소드 선정 알고리즘 변경 같은 확장이 필요하면 팩토리 빈 내의 프록시 생성 코드를 직접 변경**해야함. 
+- -> 확장에는 유연하게 열려있지 못하고 관련없는 코드의 변경이 필요할 수 있는 OCP 원칙을 잘 지키지 못하는 구조
+- 반면 스프링 ProxyFactoryBean 방식은 두가지 확장 기능인 부가기능(Advice)과
+- -> 메소드 선정 알고리즘(Pointcut)을 활용한 유연한 구조를 제공함! 
+![](img/img_32.png)

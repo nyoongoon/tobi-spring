@@ -1,5 +1,7 @@
 package org.learningtest.jdk;
 
+import java.io.BufferedInputStream;
+
 public class HelloUppercase implements Hello { // 부가기능 프록시
     Hello hello; // 다른 프록시 추가할 수도 있으므로 인터페이스로 접근
 
