@@ -9,6 +9,8 @@ import org.learningtest.jdk.Hello;
 import org.learningtest.jdk.HelloTarget;
 import org.learningtest.jdk.UppercaseHandler;
 import org.springframework.aop.framework.ProxyFactoryBean;
+import org.springframework.aop.support.DefaultPointcutAdvisor;
+import org.springframework.aop.support.NameMatchMethodPointcut;
 
 
 import java.lang.reflect.Method;
@@ -50,5 +52,21 @@ public class DymanicProxyTest {
 //            String ret = (String) method.invoke(target, args); //타겟으로 위임. 인터페이스으 모든 메소드 호출에 적용됨
 //            return ret.toUpperCase(); // 부가기능 제공
 //        }
+    }
+
+    @Test
+    public void pointcutAdvisor(){
+        ProxyFactoryBean pfBean = new ProxyFactoryBean();
+        pfBean.setTarget(new HelloTarget());
+
+        NameMatchMethodPointcut pointcut = new NameMatchMethodPointcut();
+        pointcut.setMappedName("sayH*"); // 이름비교조건설정.
+
+        pfBean.addAdvice(new DefaultPointcutAdvisor(pointcut, new UppercaseAdvice())); // 포인트컷과 어드바이스를 Advisor로 묶어서 한 번에 추가
+        
+        Hello proxiedHello = (Hello) pfBean.getObject();
+        assertThat(proxiedHello.sayHello("Toby"), is("HELLO TOBY"));
+        assertThat(proxiedHello.sayHi("Toby"), is("HI TOBY"));
+        assertThat(proxiedHello.sayThankYou("Toby"), is("Thank You Toby")); //포인트컷 선정조건에 맞지않음
     }
 }
