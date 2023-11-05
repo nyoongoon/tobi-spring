@@ -5554,6 +5554,23 @@ public class ex {
     }
 }
 ```
+```java
+public class TransactionAdvice implements MethodInterceptor { // Advice의 구현체-> 탬플릿/콜백패턴으로 부가기능/타겟 분리
+    //...
+    @Override
+    public Object invoke(MethodInvocation invocation) throws Throwable {
+        //..
+        try {
+            Object ret = invocation.proceed(); //콜백이용하여 타깃호출
+            this.transactionManager.commit(status);
+            return ret;
+        } catch (RuntimeException e) {
+            this.transactionManager.rollback(status);
+            throw e;
+        }
+    }
+}
+```
 
 - 그러나 문제 2 는 아직 해결 못함 -> 타겟오브젝트마다 ProxyFactoryBean 빈 설정정보 추가해줘야함..
 - target프로퍼티를 제외하면 빈클래스의 종류, 어드바이스, 포인트컷의 설정이 동일함..
@@ -5564,21 +5581,24 @@ public class ex {
     public ProxyFactoryBean userService() {
         ProxyFactoryBean proxyFactoryBean = new ProxyFactoryBean();
         proxyFactoryBean.setTarget(userServicImpl()); // 타겟마다 ProxyFactoryBean에 추가해줘야하는 문제 남음
-        proxyFactoryBean.setInterceptorNames("transactionAdvisor"); 
+        proxyFactoryBean.setInterceptorNames("transactionAdvisor");
         return proxyFactoryBean;
     }
 }
 ```
 
 #### 중복 문제의 접근 방법 recap
+
 - JDBC API를 사용하는 DAO 코드 -> 바뀌는 부분과 바뀌지 않는 부분 분리하여 탬플릿/콜백 사용(전략패턴&DI)
 - 프록시 클래스 코드(맨처음 인터페이스마다 직접 구현함) -> (분리및DI가 아닌) **런타임 코드 자동 생성 기법 이용.**(jdk 다이나믹 프록시)
+
 ```
 UserService txUserService = (UserService) Proxy.newProxyInstance(
     getClass().getClassLoader(),
     new Class[]{UserService.class},
     txHandler); //UserService 인터페이스 타입의 다이내믹 프록시 생성 <<-- 이부분을 중복 문제 해결
 ```
-- -> 일정한 타깃 빈의 목록을 제공하면 자동으로 각 타깃 빈에 대한 프록시를 만들어주는 방법이 없을까? 
+
+- -> 일정한 타깃 빈의 목록을 제공하면 자동으로 각 타깃 빈에 대한 프록시를 만들어주는 방법이 없을까?
 
 #### 빈후처리기를 이용한 자동 프록시 생성기
