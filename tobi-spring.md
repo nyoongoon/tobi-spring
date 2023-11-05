@@ -5393,23 +5393,29 @@ class exTest {
     }
 }
 ```
-###### 어드바이저 (Advisor) 타입 
+
+###### 어드바이저 (Advisor) 타입
+
 - 포인트컷과 어드바이스를 함께 프록시 팩토리빈에 등록할 떄는 Advisor타입으로 묶어서 addAdvisore() 호출
 - -> 왜 굳이 별개의 오브젝트(Advisor)로 묶어서 등록?
 - -> 그 이유는 ProxyFactoryBean에는 어러개의 어드바이스와 포인트컷이 추가될 수 있기 때문
 - --> **포인트컷과 어드바이스를 따로 등록하면 어떤 어드바이스에 대해 어떤 포인트컷을 적용할지 애매해지기 떄문.**
+
 ```
 어드바이저 = 포인트컷(메소드 선정 알고리즘) + 어드바이스(부가기능)
 ```
 
-### ProxyFactoryBean 적용 
+### ProxyFactoryBean 적용
+
 #### TransactionAdvice
+
 - 기존 TransactionHandler 코드를 TransactionAdvice로 수정하기
+
 ```java
 public class TransactionAdvice implements MethodInterceptor {
     PlatformTransactionManager transactionManager;
 
-    public void setTransactionManager(PlaformTransactionManager transactionManager){
+    public void setTransactionManager(PlaformTransactionManager transactionManager) {
         this.transactionManager = transactionManager;
     }
 
@@ -5420,11 +5426,11 @@ public class TransactionAdvice implements MethodInterceptor {
         TransactionStatus status =
                 this.transactionManager.getTransaction(
                         new DefaultTransactionDefinition());
-        try{
+        try {
             Object ret = invocation.proceed(); //콜백이용하여 타깃호출
             this.transactionManager.commit(status);
             return ret;
-        } catch (RuntimeException e){
+        } catch (RuntimeException e) {
             this.transactionManager.rollback(status);
             throw e;
         }
@@ -5432,4 +5438,147 @@ public class TransactionAdvice implements MethodInterceptor {
 }
 ```
 
-#### 스프링 빈 설정 수정 
+#### 스프링 빈 설정 수정
+
+```java
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+class config {
+    //    @Bean
+//    public TxProxyFactoryBean userService(){
+//        TxProxyFactoryBean txProxyFactoryBean = new TxProxyFactoryBean();
+//        txProxyFactoryBean.setTarget(userServicImpl()); //핵심기능->핸들러의invoke()메소드에서 사용하기 위함
+//        txProxyFactoryBean.setTransactionManager(transactionManager()); //부가기능 (어드바이스)
+//        txProxyFactoryBean.setPattern("upgradeLevels"); // 메소드선정(포인트컷)
+//        txProxyFactoryBean.setServiceInterface(UserService.class); //Class타입인 경우
+//        return txProxyFactoryBean;
+//    }
+    // -> TxProxyFactoryBean.getObject()에서 InvocationHandler인스턴스 생성 후 타겟과 부가기능, 메소드선정해주었기 떄문에
+    // -> 타겟, 부가기능, 메소드선정 변경 시 각각 팩토리빈을 작성해줘야함..!  
+
+    @Bean //부가기능(어드바이스)
+    public TransactionAdvice transactionAdvice() {
+        TransactionAdvice transactionAdvice = new TransactionAdvice();
+        transactionAdvice.setTransactionManager(transactionManager());
+        return transactionAdvice;
+    }
+
+    @Bean //포인트컷(메소드선정알고리즘)
+    public NameMatchMethodPointcut transactionPointcut() {
+        NameMatchMethodPointcut nameMatchMethodPointcut = new NameMatchMethodPointcut();
+        nameMatchMethodPointcut.setMappedName("upgrade*");
+        return nameMatchMethodPointcut;
+    }
+
+    @Bean // 어드바이스와 포인트컷을 담을 어드바이저 등록
+    public DefaultPointcutAdvisor transactionAdvisor() {
+        DefaultPointcutAdvisor defaultPointcutAdvisor = new DefaultPointcutAdvisor();
+        defaultPointcutAdvisor.setAdvice(transactionAdvice());
+        defaultPointcutAdvisor.setPointcut(transactionPointcut());
+        return defaultPointcutAdvisor;
+    }
+
+    @Bean // 타겟과 어드바이저를 담을 프록시 팩토리 빈 등록
+    public ProxyFactoryBean userService() {
+        ProxyFactoryBean proxyFactoryBean = new ProxyFactoryBean();
+        proxyFactoryBean.setTarget(userServicImpl());
+        proxyFactoryBean.setInterceptorNames("transactionAdvisor"); // 어드바이스와 어드바이저 동시 가능 설정. 리스트에 빈 아이디값 넣어줌.
+        return proxyFactoryBean;
+    }
+}
+```
+
+#### 테스트 적용
+
+- 타겟 오브젝트를 테스트용 목 오브젝트 사용하기
+
+```java
+class exTest {
+    @Test
+    @DirtiesContext
+    public void upgradeAllOrNothing() throws Exception {
+        TestUserService testUserService = new TestUserService(users.get(3).getId()); // 타겟
+        //..
+
+        ProxyFactoryBean txProxyFactoryBean =
+                context.getBean("&userService", ProxyFactoryBean.class);
+        txProxyFactoryBean.setTarget(testUserService);
+        UserService txUserService = (UserService) txProxyFactoryBean.getObject();
+        //..
+        try {
+            txUserService.upgradeLevels();
+            fail("TestUserServiceException expected"); // 예외 테스트이므로 정상종료라면 실패
+        } catch (TestUserServiceException e) {
+            //TestUserService가 던져주는 예외를 잡아서 계속 진행되도록 함.
+        }
+        checkLevelUpgraded(users.get(1), false);  // users.get(1)의 인스턴스는 레벨 업데이트 된 상태
+    }
+}
+```
+
+#### 어드바이스와 포인트컷의 재사용
+
+- ProxyFactoryBean은 스프링의 DI와 템플릿/콜백 패턴, 서비스 추상화 등의 기법이 모두 적용된 것.
+  ![](img/img_33.png)
+
+## 스프링 AOP
+
+### 자동 프록시 생성
+
+- 기존 FactoryBean 접근 방식의 문제점 두가지
+- 1 부가기능이 타깃 오브젝트마다 새로 만들어지는 문제 -> ProxyFactoryBean 어드바이스를 통해 해결
+
+```java
+public class TxProxyFactoryBean implements FactoryBean<Object> {
+    //.. 기존 부가기능 새로 만들어지는 문제점 
+    @Override
+    public Object getObject() throws Exception {
+        TransactionHandler txHanler = new TransactionHandler(); //싱글톤이 아님.. 타겟 설정 필요..
+        txHanler.setTarget(target);
+        //..
+    }
+}
+```
+
+- -> ProxyFactoryBean은 템플릿/콜백 패턴의 Advice의 구현체를 사용하여 문제 해결..
+
+```java
+public class ex {
+    @Bean // 타겟과 어드바이저를 담을 프록시 팩토리 빈 등록 
+    public ProxyFactoryBean userService() {
+        ProxyFactoryBean proxyFactoryBean = new ProxyFactoryBean();
+        proxyFactoryBean.setTarget(userServicImpl());
+        proxyFactoryBean.setInterceptorNames("transactionAdvisor"); // Advice는 탬플릿/콜백 패턴 -> 싱글톤 가능(부가기능-탬플릿/타겟-콜백)
+        return proxyFactoryBean;
+    }
+}
+```
+
+- 그러나 문제 2 는 아직 해결 못함 -> 타겟오브젝트마다 ProxyFactoryBean 빈 설정정보 추가해줘야함..
+- target프로퍼티를 제외하면 빈클래스의 종류, 어드바이스, 포인트컷의 설정이 동일함..
+
+```java
+public class ex {
+    @Bean // 타겟과 어드바이저를 담을 프록시 팩토리 빈 등록
+    public ProxyFactoryBean userService() {
+        ProxyFactoryBean proxyFactoryBean = new ProxyFactoryBean();
+        proxyFactoryBean.setTarget(userServicImpl()); // 타겟마다 ProxyFactoryBean에 추가해줘야하는 문제 남음
+        proxyFactoryBean.setInterceptorNames("transactionAdvisor"); 
+        return proxyFactoryBean;
+    }
+}
+```
+
+#### 중복 문제의 접근 방법 recap
+- JDBC API를 사용하는 DAO 코드 -> 바뀌는 부분과 바뀌지 않는 부분 분리하여 탬플릿/콜백 사용(전략패턴&DI)
+- 프록시 클래스 코드(맨처음 인터페이스마다 직접 구현함) -> (분리및DI가 아닌) **런타임 코드 자동 생성 기법 이용.**(jdk 다이나믹 프록시)
+```
+UserService txUserService = (UserService) Proxy.newProxyInstance(
+    getClass().getClassLoader(),
+    new Class[]{UserService.class},
+    txHandler); //UserService 인터페이스 타입의 다이내믹 프록시 생성 <<-- 이부분을 중복 문제 해결
+```
+- -> 일정한 타깃 빈의 목록을 제공하면 자동으로 각 타깃 빈에 대한 프록시를 만들어주는 방법이 없을까? 
+
+#### 빈후처리기를 이용한 자동 프록시 생성기

@@ -3,6 +3,7 @@ package org.user.service;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.springframework.aop.framework.ProxyFactoryBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
@@ -207,15 +208,19 @@ public class UserServiceTest {
 //        txHandler.setTarget(testUserService); //타겟 설정
 //        txHandler.setTransactionManager(transacionManager);
 //        txHandler.setPattern("upgradeLevels");
-//
 //        UserService txUserService = (UserService) Proxy.newProxyInstance( // 프록시 직접 생성  --> DI로 받을 수도 있음
 //                getClass().getClassLoader(),
 //                new Class[]{UserService.class},
 //                txHandler); //UserService 인터페이스 타입의 다이내믹 프록시 생성
 
-        TxProxyFactoryBean txProxyFactoryBean = // 테스트를 위한 프록시 팩토리 가져오기
-                context.getBean("&userService", TxProxyFactoryBean.class); //팩토리 빈 자체 가져오기
-        txProxyFactoryBean.setTarget(testUserService);// 테스트용 타겟 주입
+//        TxProxyFactoryBean txProxyFactoryBean = // DI사용하기위해 FactoryBean구현 테스트를 위한 프록시 팩토리 가져오기
+//                context.getBean("&userService", TxProxyFactoryBean.class); //팩토리 빈 자체 가져오기
+//        txProxyFactoryBean.setTarget(testUserService);// 테스트용 타겟 주입
+//        UserService txUserService = (UserService) txProxyFactoryBean.getObject();
+
+        ProxyFactoryBean txProxyFactoryBean =
+                context.getBean("&userService", ProxyFactoryBean.class);
+        txProxyFactoryBean.setTarget(testUserService);
         UserService txUserService = (UserService) txProxyFactoryBean.getObject();
 
         userDao.deleteAll();
