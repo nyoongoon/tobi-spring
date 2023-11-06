@@ -5554,6 +5554,7 @@ public class ex {
     }
 }
 ```
+
 ```java
 public class TransactionAdvice implements MethodInterceptor { // Advice의 구현체-> 탬플릿/콜백패턴으로 부가기능/타겟 분리
     //...
@@ -5564,6 +5565,7 @@ public class TransactionAdvice implements MethodInterceptor { // Advice의 구�
             Object ret = invocation.proceed(); //콜백이용하여 타깃호출
             this.transactionManager.commit(status);
             return ret;
+
         } catch (RuntimeException e) {
             this.transactionManager.rollback(status);
             throw e;
@@ -5602,3 +5604,123 @@ UserService txUserService = (UserService) Proxy.newProxyInstance(
 - -> 일정한 타깃 빈의 목록을 제공하면 자동으로 각 타깃 빈에 대한 프록시를 만들어주는 방법이 없을까?
 
 #### 빈후처리기를 이용한 자동 프록시 생성기
+
+- 스프링은 컨테이너로서 제공하는 기능 중에서 변하지 않는 핵심적인 부분 외에는 대부분 확장할 수 있도록 확장 포인트를 제공
+- -> **BeanPostProcessor 인터페이스를 구현해서 만드는 빈 후처리기**
+- -> 빈후처리기는 이름 그대로 스프링 빈 오브젝트로 만들어 지고 난 후에, 빈 오브젝트를 다시 가공할 수 있게 해줌.
+- **빈 후처리기를 스프링에 적용하는 방법**
+- -> 빈 후처리기 자체를 빈으로 등록하기
+- -> 스프링은 빈후처리기가 빈으로 등록되어 있으면 **빈 오브젝트가 생성될 때마다 빈 후처리기에 보내서 후처리 작업을 요청함.**
+- 빈 후처리기는 빈 오브젝트의 프로퍼티를 강제로 수정 가능, 별도의 초기화 작업 수행 가능, 만들어진 빈 오브젝트 바꿔치기 가능
+- 스프링이 설정을 참고해서 만든 오브젝트가 아닌 다른 오브젝트를 빈으로 등록시키는 것도 가능.
+- -> 스프링이 생성하는 빈 오브젝트의 일부를 프록시로 포장하고, 프록시를 빈으로 대신 등록할 수도 있음
+- -> **자동 프록시 생성 빈 후처리기**
+
+##### DefaultAdvisorAutoProxyCreator
+
+- 빈 후처리기 중 하나인 **DefaultAdvisorAutoProxyCreator**
+- -> 어드바이저를 이용한 자동 프록시 생성기.
+- DefaultAdvisorAutoProxyCreator 빈 후처리기가 등록되어 있으면 스프링은 빈 오브젝트를 만들 때마다 후처리기에게 빈을 보냄.
+- DefaultAdvisorAutoProxyCreator는 **빈으로 등록된 모든 어드바이저 내의 포인트컷을 이용**해 전달받은 빈이 프록시 적용 대상인지 확인함.
+- 프록시 적용 대상이면 그때는 내장된 프록시 생성기에게 현재 빈에 대한 프록시를 만들게 하고, 만들어진 프록시에 어드바이저를 연결해줌.
+- **빈 후처리기는 프록시가 생성되면 원래 컨테이너가 전달해준 빈 오브젝트대신 프록시 오브젝트를 컨테이너에게 돌려줌**
+- -> 컨테이너는 최종적으로 빈 후처리기가 돌려준 오브젝트를 빈으로 등록하고 사용함.
+  ![](img/img_34.png)
+- --> 적용할 빈을 선정하는 로직이 추가된 포인트컷이 담긴 어드바이저를 등록하고
+- --> 빈후처리기를 사용하면 일일이 ProxyFactoryBean 빈을 등록하지 않아도 타깃 오브젝트에 자동으로 프록시가 적용되게 할 수 있음 !
+
+#### 확장된 포인트컷
+
+- 이전에 포인트컷은 타깃오브젝트 메소드중에 어떤 메소드에 부가기능적용할지 선정해주는 역할
+- -> **포인트컷은 등록된 빈 중에 어떤 빈에 프록시를 적용할지 선택하는 역할도 할 수 있음 !**
+- Pointcut 인터페이스를 보면, 클래스 필터와 메소드 매처 두가지를 돌려주는 메소드를 갖고 있음 !
+- -> 실제 포인트컷의 선별 로직은 이 두가지 타입의 오브젝트에 담겨 있음.
+
+```java
+public interface Pointcut {
+    ClassFilter getClassFilter(); //프록시를 적용할 클래스인지 확인해준다.
+
+    MethodMatcher getMethodMatecher(); //어드바이스를 적용할 메소드인지 확인해줌. 
+}
+```
+
+- 이전에 사용한 NameMatchMethodPointcut은 메소드 선별 기능만 가진 특별한 포인트컷
+- -> 메소드만 선별한다는 건 클래스 필터는 모든 클래스를 다 받아주도록 만들어져 있다는 뜻!
+- Pointcut 선정 기능을 모두 적용한다면
+- -> **먼저 프록시를 적용할 클래스인지 판단**하고 나서,
+- -> 적용대상 클래스인 경우에는 **어드바이스를 적용할 메소드인지 확인**하는 식으로 동작함.
+- 모든빈에 대해 프록시 자동 적용 대상을 선별해야하는 빈 후처리기인 DefaultAdvisorAutoProxyCreator는
+- -> 클래스와 메소드 선정 알고리즘 모두 갖고 있는 포인트컷이 필요함. -> 그런 포인트컷과 어드바이스가 결합되어 있는 어드바이저가 필요함.
+
+#### 포인트컷 테스트
+
+```java
+class exTest {
+    @Test
+    public void classNamePointcutAdvisor() {
+        // 포인트컷 준비
+        NameMatchMethodPointcut classMethodPoincut = new NameMatchMethodPointcut() {
+            public ClassFilter getClassFilter() { // 익명 내부 클래스 방식으로 클래스 정의
+                return new ClassFilter() {
+                    public boolean matches(Class<?> clazz) { // 클래스 필터 포인트컷 재정의
+                        return clazz.getSimpleName().startsWith("HelloT");
+                    }
+                };
+            }
+        };
+        classMethodPoincut.setMappedName("sayH*"); // 메소드 매처 포인트컷
+        // 테스트
+        checkAdvice(new HelloTarget(), classMethodPoincut, true);
+
+        class HelloWorld extends HelloTarget { };
+        checkAdvice(new HelloWorld(), classMethodPoincut, false);
+
+        class HelloToby extends HelloTarget { };
+        checkAdvice(new HelloToby(), classMethodPoincut, true);
+    }
+
+    private void checkAdvice(Object target, Pointcut pointcut, boolean adviced) {
+        ProxyFactoryBean pfBean = new ProxyFactoryBean();
+        pfBean.setTarget(target);
+        pfBean.addAdvisor(new DefaultPointcutAdvisor(pointcut, new UppercaseAdvice()));
+        Hello proxiedHello = (Hello) pfBean.getObject();
+        if (adviced) {
+            assertThat(proxiedHello.sayHello("Toby"), is("HELLO TOBY"));
+            assertThat(proxiedHello.sayHi("Toby"), is("HI TOBY"));
+            assertThat(proxiedHello.sayThankYou("Toby"), is("Thank You Toby"));
+        } else {
+            assertThat(proxiedHello.sayHello("Toby"), is("Hello Toby"));
+            assertThat(proxiedHello.sayHi("Toby"), is("Hi Toby"));
+            assertThat(proxiedHello.sayThankYou("Toby"), is("Thank You Toby"));
+        }
+    }
+}
+```
+
+### DefaultAdvisorAutoProxyCreator의 적용
+#### 클래스 필터를 적용한 포인트컷 작성
+```java
+public class NameMatchClassMethodPointcut extends NameMatchMethodPointcut {
+    public void setMappedClassName(String mappedClassName) {
+        this.setClassFilter(new SimpleClassFilter(mappedClassName));// 클래스필터 오버라이딩
+    }
+
+    static class SimpleClassFilter implements ClassFilter {
+        String mappedName;
+        public SimpleClassFilter(String mappedName){
+            this.mappedName = mappedName;
+        }
+        @Override
+        public boolean matches(Class<?> clazz) {
+            return PatternMatchUtils.simpleMatch(mappedName, clazz.getSimpleName());
+        }
+    }
+}
+```
+#### 어드바이저를 이용하는 자동 프록시 생성기 등록 
+- DefaultAdvisorAutoProxyCreator는 등록된 빈 중에서 Advisor인터페이스를 구현한 것을 모두 찾음. 
+- -> 생성되는 **모든 빈에 대해 어드바이저의 포인트컷을 적용해보면서 프록시 적용 대상을 선정**. 
+- -> 빈 클래스가 프록시 선정 대상이라면 프록시를 만들어 원래 빈 오브젝트와 바꿔치기함.
+- -> 원래 빈 오브젝트는 프록시 뒤에 연결돼서 프록시를 통해서만 접근 가능하게 바뀌는 것
+- -> **타깃 빈에 의존한다고 정의한 다른 빈들은 프록시 오브젝트를 대신 DI 받음 ! **
+- --> DefaultAdvisorAutoProxyCreator는 config 하는 방법 찾아보기 
