@@ -2,7 +2,9 @@ package org.user.dao;
 
 import org.learningtest.jdk.Message;
 import org.learningtest.jdk.MessageFactoryBean;
+import org.learningtest.jdk.proxy.NameMatchClassMethodPointcut;
 import org.springframework.aop.framework.ProxyFactoryBean;
+import org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator;
 import org.springframework.aop.support.DefaultPointcutAdvisor;
 import org.springframework.aop.support.NameMatchMethodPointcut;
 import org.springframework.context.annotation.Bean;
@@ -43,8 +45,9 @@ public class BeanConfig {
 
     @Bean //포인트컷(메소드선정알고리즘)
     public NameMatchMethodPointcut transactionPointcut(){
-        NameMatchMethodPointcut nameMatchMethodPointcut = new NameMatchMethodPointcut();
-        nameMatchMethodPointcut.setMappedName("upgrade*");
+        NameMatchClassMethodPointcut nameMatchMethodPointcut = new NameMatchClassMethodPointcut(); //setClassFilter 오버라이딩
+        nameMatchMethodPointcut.setMappedClassName("*ServiceImpl"); // 클래스 이름 패턴
+        nameMatchMethodPointcut.setMappedName("upgrade*"); // 메소드 이름 패턴
         return nameMatchMethodPointcut;
     }
 
@@ -56,13 +59,23 @@ public class BeanConfig {
         return defaultPointcutAdvisor;
     }
 
-    @Bean // 타겟과 어드바이저를 담을 프록시 팩토리 빈 등록
-    public ProxyFactoryBean userService(){
-        ProxyFactoryBean proxyFactoryBean = new ProxyFactoryBean();
-        proxyFactoryBean.setTarget(userServicImpl());
-        proxyFactoryBean.setInterceptorNames("transactionAdvisor"); // 어드바이스와 어드바이저 동시 가능 설정. 리스트에 빈 아이디값 넣어줌.
-        return proxyFactoryBean;
+    @Bean
+    public DefaultAdvisorAutoProxyCreator defaultAdvisorAutoProxyCreator(){
+        return new DefaultAdvisorAutoProxyCreator(); // 자동 프록시 생성 빈 후처리기
     }
+
+    @Bean
+    public UserServiceTest.TestUserServiceImpl testUserService(){
+        return new UserServiceTest.TestUserServiceImpl();
+    }
+
+//    @Bean // 타겟과 어드바이저를 담을 프록시 팩토리 빈 등록
+//    public ProxyFactoryBean userService(){
+//        ProxyFactoryBean proxyFactoryBean = new ProxyFactoryBean();
+//        proxyFactoryBean.setTarget(userServicImpl());
+//        proxyFactoryBean.setInterceptorNames("transactionAdvisor"); // 어드바이스와 어드바이저 동시 가능 설정. 리스트에 빈 아이디값 넣어줌.
+//        return proxyFactoryBean;
+//    }
 
 
 
@@ -97,7 +110,8 @@ public class BeanConfig {
 //    }
 
     @Bean
-    public UserServiceImpl userServicImpl() {
+//    public UserServiceImpl userServicImpl() {
+    public UserServiceImpl userService() {
         UserServiceImpl userServiceImpl = new UserServiceImpl();
         userServiceImpl.setUserDao(userDao());
         userServiceImpl.setMailSender(mailSender());

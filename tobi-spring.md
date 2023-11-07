@@ -5672,10 +5672,14 @@ class exTest {
         // 테스트
         checkAdvice(new HelloTarget(), classMethodPoincut, true);
 
-        class HelloWorld extends HelloTarget { };
+        class HelloWorld extends HelloTarget {
+        }
+        ;
         checkAdvice(new HelloWorld(), classMethodPoincut, false);
 
-        class HelloToby extends HelloTarget { };
+        class HelloToby extends HelloTarget {
+        }
+        ;
         checkAdvice(new HelloToby(), classMethodPoincut, true);
     }
 
@@ -5698,7 +5702,9 @@ class exTest {
 ```
 
 ### DefaultAdvisorAutoProxyCreator의 적용
+
 #### 클래스 필터를 적용한 포인트컷 작성
+
 ```java
 public class NameMatchClassMethodPointcut extends NameMatchMethodPointcut {
     public void setMappedClassName(String mappedClassName) {
@@ -5707,9 +5713,11 @@ public class NameMatchClassMethodPointcut extends NameMatchMethodPointcut {
 
     static class SimpleClassFilter implements ClassFilter {
         String mappedName;
-        public SimpleClassFilter(String mappedName){
+
+        public SimpleClassFilter(String mappedName) {
             this.mappedName = mappedName;
         }
+
         @Override
         public boolean matches(Class<?> clazz) {
             return PatternMatchUtils.simpleMatch(mappedName, clazz.getSimpleName());
@@ -5717,10 +5725,146 @@ public class NameMatchClassMethodPointcut extends NameMatchMethodPointcut {
     }
 }
 ```
-#### 어드바이저를 이용하는 자동 프록시 생성기 등록 
-- DefaultAdvisorAutoProxyCreator는 등록된 빈 중에서 Advisor인터페이스를 구현한 것을 모두 찾음. 
-- -> 생성되는 **모든 빈에 대해 어드바이저의 포인트컷을 적용해보면서 프록시 적용 대상을 선정**. 
+
+#### 어드바이저를 이용하는 자동 프록시 생성기 등록
+
+- DefaultAdvisorAutoProxyCreator는 등록된 빈 중에서 Advisor인터페이스를 구현한 것을 모두 찾음.
+- -> 생성되는 **모든 빈에 대해 어드바이저의 포인트컷을 적용해보면서 프록시 적용 대상을 선정**.
 - -> 빈 클래스가 프록시 선정 대상이라면 프록시를 만들어 원래 빈 오브젝트와 바꿔치기함.
 - -> 원래 빈 오브젝트는 프록시 뒤에 연결돼서 프록시를 통해서만 접근 가능하게 바뀌는 것
 - -> **타깃 빈에 의존한다고 정의한 다른 빈들은 프록시 오브젝트를 대신 DI 받음 ! **
-- --> DefaultAdvisorAutoProxyCreator는 config 하는 방법 찾아보기 
+- --> DefaultAdvisorAutoProxyCreator는 config 하는 방법 찾아보기
+
+```java
+class ex {
+    @Bean
+    public DefaultAdvisorAutoProxyCreator defaultAdvisorAutoProxyCreator() {
+        return new DefaultAdvisorAutoProxyCreator(); // 자동 프록시 생성 빈 후처리기
+    }
+}
+```
+
+#### 포인트컷 등록
+
+- 클래스 필터와 메소드 매처 둘다 설정하는 포인트컷으로 수정해주기
+
+```java
+class ex {
+    @Bean //포인트컷(메소드선정알고리즘)
+    public NameMatchMethodPointcut transactionPointcut() {
+        NameMatchClassMethodPointcut nameMatchMethodPointcut = new NameMatchClassMethodPointcut(); //setClassFilter 오버라이딩
+        nameMatchMethodPointcut.setMappedClassName("*ServiceImpl"); // 클래스 이름 패턴
+        nameMatchMethodPointcut.setMappedName("upgrade*"); // 메소드 이름 패턴
+        return nameMatchMethodPointcut;
+    }
+}
+```
+
+#### 어드바이스와 어드바이저
+
+- 자동 프록시 생성 빈 후추러기리를 사용함으로써
+- 명시적으로 DI 하는 빈은 존재하지 않음
+- -> 어드바이저가 자동 수집되어 프록시 대상 선정 과정에 사용되어, 자동생성된 프록시에 다이나믹하게 DI됨!
+
+#### ProxyFactoryBean 제거와 서비스 빈의 원상복구
+
+- 타겟으로 사용되었던 userServiceImpl의 빈 아이디를 다시 userService로 되돌려놓을 수 있게 됨
+- -> 명시적으로 프록시 팩토리 빈을 등록하지 않기 떄문.
+- ProxyFactoryBean 빈 삭제 가능
+
+```java
+class ex {
+//    @Bean // 타겟과 어드바이저를 담을 프록시 팩토리 빈 등록
+//    public ProxyFactoryBean userService(){
+//        ProxyFactoryBean proxyFactoryBean = new ProxyFactoryBean();
+//        proxyFactoryBean.setTarget(userServicImpl());
+//        proxyFactoryBean.setInterceptorNames("transactionAdvisor"); // 어드바이스와 어드바이저 동시 가능 설정. 리스트에 빈 아이디값 넣어줌.
+//        return proxyFactoryBean;
+//    }
+
+    //    public UserServiceImpl userServicImpl() {
+    @Bean
+    public UserServiceImpl userService() {
+        UserServiceImpl userServiceImpl = new UserServiceImpl();
+        userServiceImpl.setUserDao(userDao());
+        userServiceImpl.setMailSender(mailSender());
+        return userServiceImpl;
+    }
+}
+```
+
+#### 자동 프록시 생성기를 사용하는 테스트
+
+- @Autowired를 통해 컨텍스트에서 가져오는 UserSerivce 타입 오브젝트는 UserServiceImpl 오브젝트가 아니라
+- -> 트랜잭션이 적용된 프록시여야함
+- 기존엔 ProxyFactoryBean이 빈으로 등록되어 있었으므로 이를 가져와 타깃을 테스트용 클래스로 바꿔치기 하는 방법을 사용함.
+- -> 테스트 클래스를 자동적으로 프록시로 생성해야함..?
+- -> 자동 프록시 생성기라는 스프링 컨테이너에 종속적인 기법을 사용했기 때문에 예외상황을 위한 테스트 대상도 빈으로 등록해줄 필욕 ㅏ있음.
+- -> 타깃을 코드에 바꿔치기 할 수 없고, 자동 프록시 생성기에 적용 되는지도 빈을 통해 확인 필요
+- 기존에 만들어서 사용하던 강제 예외 발생용 TestUserService 클래스를 빈으로 등록하기 - 무넺 두가지
+- -> TestUserService가 테스트 클래스 내부에 정의된 스태틱 클래스 .
+- -> 포인트컷 이름 패턴이 맞지 않음.
+
+##### 스태틱 클래스 빈으로 등록하기 & 클래스 이름 변경
+
+- 예외 대상인 사용자 아이디를 클래스에 하드코딩 (어쩔수없는부분..?)
+
+```java
+class exTest {
+    static class TestUserServiceImpl extends UserServiceImpl {
+        private String id = " madnite1";
+
+        @Override
+        protected void upgradeLevel(User user) {
+            // 지정된 id의 User 오브젝트가 발견되면 예외를 던져서 작업을 강제로 중단.
+            if (user.getId().equals(this.id)) throw new TestUserServiceException();
+            super.upgradeLevel(user);
+        }
+    }
+}
+```
+
+- 스태틱 멤버 클래스 빈등록
+
+```java
+class ex {
+    @Bean
+    public UserServiceTest.TestUserServiceImpl testUserService() {
+        return new UserServiceTest.TestUserServiceImpl();
+    }
+}
+```
+
+- TestUserServiceImpl 클래스가 userService 빈을 상속하는 경우 parent 속성을 사용하지 않아도 됨.
+- 상속 관계가 필요하다면 클래스 정의에서 상속을 설정하기.
+- 테스트 코드 수정
+
+```java
+class exTest {
+    @Autowired
+    private UserService UserService; // 타겟의 프록시
+    @Autowired
+    private UserService testUserService; // 테스트 클래스의 프록시
+
+    @Test
+//    @DirtiesContext --> DI를 통해 테스트가 이루어지므로 컨텍스트 수정이 없어져서 불필요!
+    public void upgradeAllOrNothing() throws Exception {
+        // --> 프록시 설정을 위해 TestUserService를 빈등록함.
+//    TestUserService testUserService = new TestUserService(users.get(3).getId()); // 타겟
+//    testUserService.setUserDao(this.userDao); // 수동 DI
+//    testUserService.setTransactionManager(transacionManager);
+//    testUserService.setMailSender(mailSender);
+        userDao.deleteAll();
+        for (User user : users) {
+            userDao.add(user);
+        }
+        try {
+            this.testUserService.upgradeLevels(); // 주입된 프록시 
+            fail("TestUserServiceException expected"); // 예외 테스트이므로 정상종료라면 실패
+        } catch (TestUserServiceException e) {
+            //TestUserService가 던져주는 예외를 잡아서 계속 진행되도록 함.
+        }
+        checkLevelUpgraded(users.get(1), false);  // users.get(1)의 인스턴스는 레벨 업데이트 된 상태
+    }
+}
+```

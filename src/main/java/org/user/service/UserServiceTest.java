@@ -16,8 +16,6 @@ import org.user.dao.UserDaoJdbc;
 import org.user.domain.User;
 
 import javax.sql.DataSource;
-import java.io.BufferedInputStream;
-import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -41,7 +39,9 @@ public class UserServiceTest {
     @Autowired
     private UserService UserService;
     @Autowired
-    private UserServiceImpl userServiceImpl;
+    private UserService testUserService;
+//    @Autowired
+//    private UserServiceImpl userServiceImpl;
     @Autowired
     private UserDaoJdbc userDao;
     @Autowired
@@ -112,18 +112,13 @@ public class UserServiceTest {
                 new User("bumin", "박범진", "p1", Level.BASIC, MIN_LOGCOUNT_FOR_SILVER - 1, 0),
                 new User("joytouch", "강명성", "p2", Level.BASIC, MIN_LOGCOUNT_FOR_SILVER, 0),
                 new User("erwins", "신승한", "p3", Level.SILVER, MIN_RECCOMEND_FOR_GOLD - 1, 29),
-                new User("mdnite1", "이상호", "p4", Level.SILVER, MIN_RECCOMEND_FOR_GOLD, 30),
+                new User("madnite1", "이상호", "p4", Level.SILVER, MIN_RECCOMEND_FOR_GOLD, 30),
                 new User("green", "오민규", "p5", Level.GOLD, 100, Integer.MAX_VALUE)
         );
     }
 
-    static class TestUserService extends UserServiceImpl {
-        private String id;
-
-        private TestUserService(String id) {
-            this.id = id;
-        }
-
+    public static class TestUserServiceImpl extends UserServiceImpl {
+        private String id = " madnite1";
         @Override
         protected void upgradeLevel(User user) {
             // 지정된 id의 User 오브젝트가 발견되면 예외를 던져서 작업을 강제로 중단.
@@ -193,12 +188,12 @@ public class UserServiceTest {
     }
 
     @Test
-    @DirtiesContext
+//    @DirtiesContext --> DI를 통해 테스트가 이루어지므로 컨텍스트 수정이 없어져서 불필요!
     public void upgradeAllOrNothing() throws Exception {
-        TestUserService testUserService = new TestUserService(users.get(3).getId()); // 타겟
-        testUserService.setUserDao(this.userDao); // 수동 DI
-        testUserService.setTransactionManager(transacionManager);
-        testUserService.setMailSender(mailSender);
+//        TestUserService testUserService = new TestUserService(users.get(3).getId()); // 타겟
+//        testUserService.setUserDao(this.userDao); // 수동 DI
+//        testUserService.setTransactionManager(transacionManager);
+//        testUserService.setMailSender(mailSender);
 
 //        UserServiceTx txUserService = new UserServiceTx(); // 직접 프록시 구현
 //        txUserService.setTransactionManager(transacionManager);
@@ -218,17 +213,17 @@ public class UserServiceTest {
 //        txProxyFactoryBean.setTarget(testUserService);// 테스트용 타겟 주입
 //        UserService txUserService = (UserService) txProxyFactoryBean.getObject();
 
-        ProxyFactoryBean txProxyFactoryBean =
-                context.getBean("&userService", ProxyFactoryBean.class);
-        txProxyFactoryBean.setTarget(testUserService);
-        UserService txUserService = (UserService) txProxyFactoryBean.getObject();
+//        ProxyFactoryBean txProxyFactoryBean =
+//                context.getBean("&userService", ProxyFactoryBean.class);
+//        txProxyFactoryBean.setTarget(testUserService);
+//        UserService txUserService = (UserService) txProxyFactoryBean.getObject();
 
         userDao.deleteAll();
         for (User user : users) {
             userDao.add(user);
         }
         try {
-            txUserService.upgradeLevels();
+            this.testUserService.upgradeLevels();
             fail("TestUserServiceException expected"); // 예외 테스트이므로 정상종료라면 실패
         } catch (TestUserServiceException e) {
             //TestUserService가 던져주는 예외를 잡아서 계속 진행되도록 함.
