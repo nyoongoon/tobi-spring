@@ -95,6 +95,12 @@ public class DymanicProxyTest {
         checkAdvice(new HelloToby(), classMethodPoincut, true);
     }
 
+    @Test
+    public void advisorAutoProxyCreator(){
+        assertThat(testUserService, is(java.lang.reflect.Proxy.class));
+    }
+
+
     private void checkAdvice(Object target, Pointcut pointcut, boolean adviced){
         ProxyFactoryBean pfBean = new ProxyFactoryBean();
         pfBean.setTarget(target);

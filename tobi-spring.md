@@ -5762,7 +5762,7 @@ class ex {
 
 #### 어드바이스와 어드바이저
 
-- 자동 프록시 생성 빈 후추러기리를 사용함으로써
+- 자동 프록시 생성 빈 후처리기를 사용함으로써
 - 명시적으로 DI 하는 빈은 존재하지 않음
 - -> 어드바이저가 자동 수집되어 프록시 대상 선정 과정에 사용되어, 자동생성된 프록시에 다이나믹하게 DI됨!
 
@@ -5811,7 +5811,7 @@ class ex {
 
 ```java
 class exTest {
-    static class TestUserServiceImpl extends UserServiceImpl {
+    static class TestUserServiceImpl extends UserServiceImpl { // 포인트컷 클래스 필터를 위해 메이밍 수정 
         private String id = " madnite1";
 
         @Override
@@ -5852,7 +5852,7 @@ class exTest {
         // --> 프록시 설정을 위해 TestUserService를 빈등록함.
 //    TestUserService testUserService = new TestUserService(users.get(3).getId()); // 타겟
 //    testUserService.setUserDao(this.userDao); // 수동 DI
-//    testUserService.setTransactionManager(transacionManager);
+//    testUserService.setTransactionManager(transactionManager);
 //    testUserService.setMailSender(mailSender);
         userDao.deleteAll();
         for (User user : users) {
@@ -5868,3 +5868,76 @@ class exTest {
     }
 }
 ```
+
+#### 자동생성 프록시 확인
+
+- 트랜잭션 어드바이스를 적용한 프록시 자동 생성기를 빈 후처리기 메커니즘을 통해 적용함
+- -> 트랜잭션이 필요한 빈에 트랜잭션 부가기능 적용됐는가 확인 필요
+- -> 아무 빈에나 트랜잭션 부가기능이 적용된 것은 아닌지 확인 필요
+- --> 포인트컷의 클래스이름 패턴을 변경해서 빈에 트랜잭션 적용되지 않게 해보기
+
+```java
+class exTest {
+    @Test
+    public void advisorAutoProxyCreator() {
+        assertThat(testUserService, is(java.lang.reflect.Proxy.class)); //주입된 빈이 Proxy의 서브 클래스인가?
+    }
+}
+```
+
+- DefaultAdvisorAutoProxyCreator에 의해 userService 빈이 프록시로 바꿔치기 됐다면
+- -> getBean("userService")로 가져온 오브젝트는 TestUserService 타입이 아니라, JDK의 Proxy타입일 것임
+- -> 모든 JDK 다이나믹 프록시 방식으로 만들어지는 프록시는 Proxy클래스의 서브 클래스
+
+### 포인트컷 표현식을 이용한 포인트컷.
+
+- 포인트컷의 클래스와 메소드를 선정하는 알고리즘 작성 방법 -> 포인트컷 표현식.
+
+#### 포인트컷 표현식
+
+- AspectExpressionPointcut 클래스
+
+#### 포인트컷 표현식 문법
+
+- AspectJ 포인트컷 표현식은 지시자를 이용해 작성함.
+- 대표적으로 사용되는것 execution()
+- []은 생략가능, |은 OR 조건
+
+```
+execution([접근제한자 패턴] 타입패턴 [타입패턴.]이름패턴 (타입패턴 | "..", ...) [throws 예외패턴])
+```
+
+```java
+class exTest {
+    @Test
+    public void methodSignaturePointcut() throws SecurityException, NoSuchMethodException {
+        AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();
+        pointcut.setExpression("execution(public int " +
+                "springbook.learningtest.spring.pointcut.Target.minus(int,int) " +
+                "throws java.lang.RuntimeException)"); //Target 클래스 minus() 메소드 시그니처 AspectJ 작성
+
+        // Target.minus()
+        assertThat(pointcut.getClassFilter().matches(Target.class) &&
+                pointcut.getMethodMatcher().matches(
+                        Target.class.getMethod("minus", int.class, int.class), null), is(true));
+
+        // Target.plus()
+        assertThat(pointcut.getClassFilter().matches(Target.class) &&
+                pointcut.getMethodMatcher().matches(
+                        Target.class.getMethod("plus", int.class, int.class), null), is(false));
+
+        // Bean.method()
+        assertThat(pointcut.getClassFilter().matches(Bean.class) &&
+                pointcut.getMethodMatcher().matches(
+                        Target.class.getMethod("method"), null), is(false));
+    }
+}
+
+```
+- AspectJExpressionPointcut 클래스의 오브젝트를 만들고 포인트컷 표현식을 expression 프로퍼티에 넣어주면 포인트컷을 사용할 준비가 됨. 
+- 포인트컷 표ㅅ현식은 메소드 시그니처를 execution() 안에 넣어서 작성 -> 메소드 실행에 대한 포인트컷이라는 의미 
+
+#### 포인트컷 표현식 테스트 
+- 모든 선정조건을 다 없애고 모든 메소드를 다 허용하늩 포인트컷
+- execution(* *(..)) //리턴타입, 파라미터, 메소드 이름에 상관없이 모든 메소드 조건을 다 허용하는 포인트컷 표현식. 
+- -> 포인트컷을 이용해 특정 메소드에 대한 포인트컷 적용해보고 결과 확인하는 메소드 -> 메소드를 지정하려면 클래스와 메소드 이름, 메소드 파라미터 타입 정보가 필요 
