@@ -3,7 +3,6 @@ package org.user.service;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.springframework.aop.framework.ProxyFactoryBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
@@ -117,7 +116,7 @@ public class UserServiceTest {
         );
     }
 
-    public static class TestUserServiceImpl extends UserServiceImpl {
+    public static class TestUserService extends UserServiceImpl {
         private String id = " madnite1";
         @Override
         protected void upgradeLevel(User user) {

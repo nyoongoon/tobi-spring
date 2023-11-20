@@ -1,12 +1,9 @@
 package org.user.dao;
 
-import org.learningtest.jdk.Message;
 import org.learningtest.jdk.MessageFactoryBean;
-import org.learningtest.jdk.proxy.NameMatchClassMethodPointcut;
-import org.springframework.aop.framework.ProxyFactoryBean;
+import org.springframework.aop.aspectj.AspectJExpressionPointcut;
 import org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator;
 import org.springframework.aop.support.DefaultPointcutAdvisor;
-import org.springframework.aop.support.NameMatchMethodPointcut;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -43,12 +40,20 @@ public class BeanConfig {
         return transactionAdvice;
     }
 
-    @Bean //포인트컷(메소드선정알고리즘)
-    public NameMatchMethodPointcut transactionPointcut(){
-        NameMatchClassMethodPointcut nameMatchMethodPointcut = new NameMatchClassMethodPointcut(); //setClassFilter 오버라이딩
-        nameMatchMethodPointcut.setMappedClassName("*ServiceImpl"); // 클래스 이름 패턴
-        nameMatchMethodPointcut.setMappedName("upgrade*"); // 메소드 이름 패턴
-        return nameMatchMethodPointcut;
+//    @Bean //포인트컷(메소드선정알고리즘) // 포인트컷 표현식을 사용하여 직접 만든 포인트컷 구현클래스는 필요 없음
+//    public NameMatchMethodPointcut transactionPointcut(){
+//        NameMatchClassMethodPointcut nameMatchMethodPointcut = new NameMatchClassMethodPointcut(); //setClassFilter 오버라이딩
+//        nameMatchMethodPointcut.setMappedClassName("*ServiceImpl"); // 클래스 이름 패턴
+//        nameMatchMethodPointcut.setMappedName("upgrade*"); // 메소드 이름 패턴
+//        return nameMatchMethodPointcut;
+//    }
+
+    // 포인트컷 표현식을 사용한 빈 설정
+    @Bean
+    public AspectJExpressionPointcut transactionPointcut(){
+        AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();
+        pointcut.setExpression("execution(* *..*ServiceImpl.upgrade*(..))");
+        return pointcut;
     }
 
     @Bean // 어드바이스와 포인트컷을 담을 어드바이저 등록
@@ -65,8 +70,8 @@ public class BeanConfig {
     }
 
     @Bean
-    public UserServiceTest.TestUserServiceImpl testUserService(){
-        return new UserServiceTest.TestUserServiceImpl();
+    public UserServiceTest.TestUserService testUserService(){
+        return new UserServiceTest.TestUserService();
     }
 
 //    @Bean // 타겟과 어드바이저를 담을 프록시 팩토리 빈 등록

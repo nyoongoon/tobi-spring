@@ -5924,20 +5924,111 @@ class exTest {
         // Target.plus()
         assertThat(pointcut.getClassFilter().matches(Target.class) &&
                 pointcut.getMethodMatcher().matches(
-                        Target.class.getMethod("plus", int.class, int.class), null), is(false));
+                        Target.class.getMethod("plus", int.class, int.class), null), is(false)); //메소드 매처에서 실패
 
         // Bean.method()
         assertThat(pointcut.getClassFilter().matches(Bean.class) &&
                 pointcut.getMethodMatcher().matches(
-                        Target.class.getMethod("method"), null), is(false));
+                        Target.class.getMethod("method"), null), is(false)); // 클래스 필터에서 불일치
     }
 }
 
 ```
-- AspectJExpressionPointcut 클래스의 오브젝트를 만들고 포인트컷 표현식을 expression 프로퍼티에 넣어주면 포인트컷을 사용할 준비가 됨. 
-- 포인트컷 표ㅅ현식은 메소드 시그니처를 execution() 안에 넣어서 작성 -> 메소드 실행에 대한 포인트컷이라는 의미 
 
-#### 포인트컷 표현식 테스트 
+- AspectJExpressionPointcut 클래스의 오브젝트를 만들고 포인트컷 표현식을 expression 프로퍼티에 넣어주면 포인트컷을 사용할 준비가 됨.
+- 포인트컷 표ㅅ현식은 메소드 시그니처를 execution() 안에 넣어서 작성 -> 메소드 실행에 대한 포인트컷이라는 의미
+
+#### 포인트컷 표현식 테스트
+
 - 모든 선정조건을 다 없애고 모든 메소드를 다 허용하늩 포인트컷
-- execution(* *(..)) //리턴타입, 파라미터, 메소드 이름에 상관없이 모든 메소드 조건을 다 허용하는 포인트컷 표현식. 
-- -> 포인트컷을 이용해 특정 메소드에 대한 포인트컷 적용해보고 결과 확인하는 메소드 -> 메소드를 지정하려면 클래스와 메소드 이름, 메소드 파라미터 타입 정보가 필요 
+- execution(* *(..)) //리턴타입, 파라미터, 메소드 이름에 상관없이 모든 메소드 조건을 다 허용하는 포인트컷 표현식.
+- -> 포인트컷을 이용해 특정 메소드에 대한 포인트컷 적용해보고 결과 확인하는 메소드 -> 메소드를 지정하려면 클래스와 메소드 이름, 메소드 파라미터 타입 정보가 필요
+
+#### 포인트컷 표현식을 이용하는 포인트컷 적용
+
+- bean()
+- @annotatin()
+- 포인트컷 표현식을 사용하여 직접 만든 포인트컷 구현클래스는 필요 없음
+- -> AspectJExpressionPointcut 빈을 등록하고 expression 프로퍼티에 넣어주면 됨.
+- -> 클래스 이름은 ServiceImpl로 끝나고 메소드 이름은 upgrade로 시작하는 모든 클래스에 적용되도록 하는 표현식
+- -> execution(* *..*ServiceImpl.upgrade*(..))
+
+```java
+class config {
+//    @Bean //포인트컷(메소드선정알고리즘) // 포인트컷 표현식을 사용하여 직접 만든 포인트컷 구현클래스는 필요 없음
+//    public NameMatchMethodPointcut transactionPointcut(){
+//        NameMatchClassMethodPointcut nameMatchMethodPointcut = new NameMatchClassMethodPointcut(); //setClassFilter 오버라이딩
+//        nameMatchMethodPointcut.setMappedClassName("*ServiceImpl"); // 클래스 이름 패턴
+//        nameMatchMethodPointcut.setMappedName("upgrade*"); // 메소드 이름 패턴
+//        return nameMatchMethodPointcut;
+//    }
+
+    // 포인트컷 표현식을 사용한 빈 설정
+    @Bean
+    public AspectJExpressionPointcut transactionPointcut() {
+        AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();
+        pointcut.setExpression("execution(* *..*ServiceImpl.upgrade*(..))");
+        return pointcut;
+    }
+}
+```
+#### 포인트컷 표현식의 대상은 클래스의 이름이 아닌 타입 패턴!
+- 기존 TestUserServiceImpl 클래스를 TestUserService로 변경해도 위의 포인트컷이 적용됨 !
+- -> 표인트컷 표현식의 대상은 클래스의 이름이 아닌 **타입 패턴**이기 때문 
+- -> 상속받은 UserServiceImpl 타입을 보고 표인터컷 표현식의 대상으로 선정됨. 
+```java
+public static class TestUserService extends UserServiceImpl {}
+```
+
+
+
+### AOP란 무엇인가? 
+- 지금까지 비즈니스 로직을 담은 UserService에 **트랜잭션 적용과정 정리**. 
+#### 1. 트랜잭션 서비스 추상화
+- 트랜잭션 적용이라는 추상적인 작업 내용은 유지한채로, 구체적인 구현방법을 바꿀 수 있도록 서비스 추상화 기법을 적용함 
+- 구체적인 구현 내용을 담은 의존 오브젝트는 런타임시에 다이나믹하게 연결 해줌 -> DI를 활용한 접근방법.
+#### 2. 프록시와 데코레이터 패턴 
+- 트랜잭션을 어떻게 다룰 것인가는 DI 추상화를 통해 코드에서 제거했지만, 여전히 비즈니스 로직 코드에는 트랜잭션을 적용하고 있는 코드가 남음. 
+- -> DI를 이용해 데코레이터 패턴을 적용 - 부가기능 분리 
+- -> 클라이언트 -> 데코레이터 -> 타겟 구조를 DI를 통해 적용하여, 비즈니스 로직코드에 트랜잭션 코드 제거.
+- 프록시 역할을 하는 트랜잭션 데코레이터를 거쳐서 타깃에 접근
+#### 3. 다이내믹 프록시와 프록시 팩토리 빈
+- 비즈니스 클래스마다 프록시 클래스를 만들어야하는 번거로움이 발생 & 부가기능 필요없는 메소드도 프록시에서 구현 해줘야했음
+- -> 프록시 오브젝트를 런타임시에 만들어주는 JDK 다이내믹 프록시 기술 적용 
+- --> invoke()를 통해 부가기능 부여 코드가 여기저기 중복되서 나타내는 문제도 일부 해결 
+- 그러나, 동일 기능의 프록시를 비즈니스 오브젝트마다 중복적용해줘야하는 문제는 해결하지못함. 
+- 1. JDK 프록시 방식
+- -> JDK가 생성하므로 DI 불가
+```
+// 구현 프록시 클래스를 일일이 만들어야했음, 메소드에 부가기능 코드 중복
+UserService txUserService = (UserService) Proxy.newProxyInstance(
+    getClass().getClassLoader(),
+    new Class[]{UserService.class},
+    txHandler)
+  ```
+- 2. 팩토리빈 -> 각기 생성 & 각기 설정 -> 동일 기능의 프록시를 비즈니스 오브젝트마다 중복적용해줘야하는 문제
+- --> invoke()를 통해 부가기능 부여 코드가 여기저기 중복되서 나타내는 문제도 일부 해결
+```java
+public class MessageFactoryBean implements FactoryBean<Message> {}
+```
+```
+@Bean
+public MessageFactoryBean message(){
+    MessageFactoryBean messageFactoryBean = new MessageFactoryBean();
+    messageFactoryBean.setText("Factory Bean");
+    return messageFactoryBean;
+}
+```
+- 3. 프록시 팩토리빈 -> 내부적으로 탬플릿/콜백 패턴을 사용하는 스프링 프록시 팩토리 빈 덕분에 어드바이스와 포인트컷을 포록시에서 분리 가능해졌음.
+```
+@Bean
+public TxProxyFactoryBean userService(){
+     TxProxyFactoryBean txProxyFactoryBean = new TxProxyFactoryBean();
+     txProxyFactoryBean.setTarget(userServicImpl()); //핵심기능->핸들러의invoke()메소드에서 사용하기 위함
+     txProxyFactoryBean.setTransactionManager(transactionManager()); //부가기능 (어드바이스)
+     txProxyFactoryBean.setPattern("upgradeLevels"); // 메소드선정(포인트컷)
+     txProxyFactoryBean.setServiceInterface(UserService.class); //Class타입인 경우
+     return txProxyFactoryBean;
+}
+```
+#### 자동 프록시 생성 방법과 포인트 컷 -- 정리 다시 보기... 
