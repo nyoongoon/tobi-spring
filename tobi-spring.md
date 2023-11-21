@@ -5972,54 +5972,77 @@ class config {
     }
 }
 ```
+
 #### 포인트컷 표현식의 대상은 클래스의 이름이 아닌 타입 패턴!
+
 - 기존 TestUserServiceImpl 클래스를 TestUserService로 변경해도 위의 포인트컷이 적용됨 !
-- -> 표인트컷 표현식의 대상은 클래스의 이름이 아닌 **타입 패턴**이기 때문 
-- -> 상속받은 UserServiceImpl 타입을 보고 표인터컷 표현식의 대상으로 선정됨. 
+- -> 표인트컷 표현식의 대상은 클래스의 이름이 아닌 **타입 패턴**이기 때문
+- -> 상속받은 UserServiceImpl 타입을 보고 표인터컷 표현식의 대상으로 선정됨.
+
 ```java
-public static class TestUserService extends UserServiceImpl {}
+public static class TestUserService extends UserServiceImpl {
+}
 ```
 
+### AOP란 무엇인가?
 
+- 지금까지 비즈니스 로직을 담은 UserService에 **트랜잭션 적용과정 정리**.
 
-### AOP란 무엇인가? 
-- 지금까지 비즈니스 로직을 담은 UserService에 **트랜잭션 적용과정 정리**. 
 #### 1. 트랜잭션 서비스 추상화
-- 트랜잭션 적용이라는 추상적인 작업 내용은 유지한채로, 구체적인 구현방법을 바꿀 수 있도록 서비스 추상화 기법을 적용함 
+
+- 트랜잭션 적용이라는 추상적인 작업 내용은 유지한채로, 구체적인 구현방법을 바꿀 수 있도록 서비스 추상화 기법을 적용함
 - 구체적인 구현 내용을 담은 의존 오브젝트는 런타임시에 다이나믹하게 연결 해줌 -> DI를 활용한 접근방법.
-#### 2. 프록시와 데코레이터 패턴 
-- 트랜잭션을 어떻게 다룰 것인가는 DI 추상화를 통해 코드에서 제거했지만, 여전히 비즈니스 로직 코드에는 트랜잭션을 적용하고 있는 코드가 남음. 
-- -> DI를 이용해 데코레이터 패턴을 적용 - 부가기능 분리 
+
+#### 2. 프록시와 데코레이터 패턴
+
+- 트랜잭션을 어떻게 다룰 것인가는 DI 추상화를 통해 코드에서 제거했지만, 여전히 비즈니스 로직 코드에는 트랜잭션을 적용하고 있는 코드가 남음.
+- -> DI를 이용해 데코레이터 패턴을 적용 - 부가기능 분리
 - -> 클라이언트 -> 데코레이터 -> 타겟 구조를 DI를 통해 적용하여, 비즈니스 로직코드에 트랜잭션 코드 제거.
 - 프록시 역할을 하는 트랜잭션 데코레이터를 거쳐서 타깃에 접근
+
 #### 3. 다이내믹 프록시와 프록시 팩토리 빈
+
 - 비즈니스 클래스마다 프록시 클래스를 만들어야하는 번거로움이 발생 & 부가기능 필요없는 메소드도 프록시에서 구현 해줘야했음
-- -> 프록시 오브젝트를 런타임시에 만들어주는 JDK 다이내믹 프록시 기술 적용 
-- --> invoke()를 통해 부가기능 부여 코드가 여기저기 중복되서 나타내는 문제도 일부 해결 
-- 그러나, 동일 기능의 프록시를 비즈니스 오브젝트마다 중복적용해줘야하는 문제는 해결하지못함. 
-- 1. JDK 프록시 방식
+- -> 프록시 오브젝트를 런타임시에 만들어주는 JDK 다이내믹 프록시 기술 적용
+- --> invoke()를 통해 부가기능 부여 코드가 여기저기 중복되서 나타내는 문제도 일부 해결
+- 그러나, 동일 기능의 프록시를 비즈니스 오브젝트마다 중복적용해줘야하는 문제는 해결하지못함.
+-
+    1. JDK 프록시 방식
 - -> JDK가 생성하므로 DI 불가
+
 ```
-// 구현 프록시 클래스를 일일이 만들어야했음, 메소드에 부가기능 코드 중복
+// 구현 프록시 클래스를 일일이 만들어야했음, 메소드에 부가기능 코드 중복 (invoke())
 UserService txUserService = (UserService) Proxy.newProxyInstance(
     getClass().getClassLoader(),
     new Class[]{UserService.class},
     txHandler)
   ```
-- 2. 팩토리빈 -> 각기 생성 & 각기 설정 -> 동일 기능의 프록시를 비즈니스 오브젝트마다 중복적용해줘야하는 문제
-- --> invoke()를 통해 부가기능 부여 코드가 여기저기 중복되서 나타내는 문제도 일부 해결
+
+    2. 팩토리빈 -> 각기 생성 & 각기 설정 -> 동일 기능의 프록시를 비즈니스 오브젝트마다 중복적용해줘야하는 문제
+
+- --> invoke()를 통해 부가기능 부여 코드가 여기저기 중복되서 나타내는 문제도 일부 해결 (팩토리 내에서 pattern적용)
+
 ```java
-public class MessageFactoryBean implements FactoryBean<Message> {}
-```
-```
-@Bean
-public MessageFactoryBean message(){
-    MessageFactoryBean messageFactoryBean = new MessageFactoryBean();
-    messageFactoryBean.setText("Factory Bean");
-    return messageFactoryBean;
+public class TxProxyFactoryBean implements FactoryBean<Object> {
+    //..
+    @Override
+    public Object getObject() throws Exception { //DI 받은 정보를 이용해서 TransactionHandler를 사용하는 다이나믹 프록시를 생성
+        TransactionHandler txHanler = new TransactionHandler(); //싱글톤이 아님.. 타겟 설정 필요..
+        txHanler.setTarget(target);
+        txHanler.setTransactionManager(transactionManager);
+        txHanler.setPattern(pattern);
+        return Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class[]{serviceInterface},
+                txHanler);
+    }
 }
 ```
-- 3. 프록시 팩토리빈 -> 내부적으로 탬플릿/콜백 패턴을 사용하는 스프링 프록시 팩토리 빈 덕분에 어드바이스와 포인트컷을 포록시에서 분리 가능해졌음.
+
+-
+    3. 프록시 팩토리빈 -> 내부적으로 탬플릿/콜백 패턴을 사용하는 스프링 프록시 팩토리 빈 덕분에 어드바이스와 포인트컷을 포록시에서 분리 가능해졌음.
+-
+
 ```
 @Bean
 public TxProxyFactoryBean userService(){
@@ -6031,4 +6054,22 @@ public TxProxyFactoryBean userService(){
      return txProxyFactoryBean;
 }
 ```
-#### 자동 프록시 생성 방법과 포인트 컷 -- 정리 다시 보기... 
+
+- 탬플릿/콜백 구조 :  Advice는 탬플릿/콜백 패턴 -> 싱글톤 가능(부가기능-탬플릿/타겟-콜백)
+```java
+public class UppercaseAdvice implements MethodInterceptor { //ProxyFactoryBean에 addAdvice()에 넣으면 알아서 타겟의 정보도 전달됨..
+    @Override
+    public Object invoke(MethodInvocation invocation) throws Throwable { //탬플릿/콜백구조
+        String ret = (String) invocation.proceed(); // 리플렉션 Method와 달리 메소드 실행시 타겟오브젝트 전달 필요 없음
+        return ret.toUpperCase(); //부가기능 적용     // MethodInvocation은 메소드 정보와함께 타겟 오브젝트를 알고 있기 때문..
+    }
+
+//        @Override // InvocationHandler와 비교용
+//        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+//            String ret = (String) method.invoke(target, args); //타겟으로 위임. 인터페이스으 모든 메소드 호출에 적용됨
+//            return ret.toUpperCase(); // 부가기능 제공
+//        }
+}
+```
+
+#### 자동 프록시 생성 방법과 포인트 컷
