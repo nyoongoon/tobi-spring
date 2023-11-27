@@ -2130,5 +2130,82 @@ public class UppercaseAdvice implements MethodInterceptor { //ProxyFactoryBean�
 
 
 ### AOP 네임스페이스
-- AOP를 위한 빈들은 스프링 컨테이너에 의해 자동을 ㅗ인식돼서 특별한 작업을 위해 사용됨
+- AOP를 위한 빈들은 스프링 컨테이너에 의해 자동으로 인식돼서 특별한 작업을 위해 사용됨
+- -> 스프링의 프록시 방식 AOP를 적용하려면 최소한 네가지 빈 등록해야함. 
+#### 자동 프록시 생성기   
+- 스프링의 DefaultAdvisorAutoProxyCreator 클래스를 빈으로 등록. 
+- -> 다른 빈을 DI하지도 않고 자신도 DI되지 않으며 독립적으로 존재
+- -> 애플리케이션 컨텍스트가 빈오브젝트를 생성하는 과정에 빈 후처리기로 참여
+- 빈으로 등록된 어드바이저를 이용해서 프록시를 자동으로 생성하는 기능을 담당. 
+#### 어드바이스
+- 부가기능을 구현한 클래스를 빈으로 등록
+- -> AOP 관련 빈 중 유일하게 직접 구현
+#### 포인트컷
+- 스프링의 AspectJExpressionProincut을 빈으로 등록
+- expression 프로퍼티에 포인트컷 표현식 넣어줌
+#### 어드바이저
+- 스프링의 DefaultPointcutAdvisor 클래스를 빈으로 등록
+- 어드바이스와 포인트컷을 프로퍼티로 참조
+- 자동 프록시 생성기에 의해 자동 검색되어 사용
+### AOP 네임스페이스
+- AOP위한 빈들을 간편하게 등록할 수 있음
+- 스프링은 AOP와 관련된 태그를 정의해둔 aop 스키마 제공. (xml)
+
+
+## 트랜잭션 속성
+- 트랜잭션을 가져올 떄 파라미터로 트랜잭션 매니저에게 전달하는 DefaultTransactionDefinition 용도 
+```java
+public class TransactionAdvice implements MethodInterceptor {
+    //..
+    public Ojbect invoke(MethodInvocation invocation) throws  Throwable{ //템플릿&콜백 패턴
+        TransactionStatus status = 
+                this.transactionManage.getTrasaction(new DefaultTransactionDefinition()); // 트랜잭션 정의...
+        try{
+            Object ret = invocation.proceed();
+            this.transactionManger.commit(status);
+            return ret;
+        }catch (RuntimeException e){
+            this.transactionManager.rollback(status);
+            throw e;
+        }
+    }
+}
+```
+
+### 트랜잭션 정의
+- DefaultTrasactionDefinition이 구현하고 있는 
+- -> TrasactionDefinition 인터페이스는 트랜잭션의 동작방식에 영향을 줄 수 있는 네가지 속성을 정의
+- *트랜잭션 전파, *격리수준, *제한시간, *읽기전용
+#### 트랜잭션 전파
+- 트랜잭션 전파란 트랜잭션의 경계에서 이미 진행중인 트랜잭션이 있을 떄 또는 없을 때 어떻게 동작할 것인가를 결정하는 방식.
+![](img/img_36.png)
+- 위처럼 각각 동립적인 트랜잭션 경계를 가진 두개의 코드가 있을 때,
+- ->A의 트랜잭션이 끝나지 않은 시점에서 B를 호출했다면 B의 코드는 어떤 트랜잭션 안에서 동작해야할까?
+- -> 이를 정의하는 것이 트랜잭션 전파 속성
+##### PROPAGATION_REQUIRED
+- 가장 많이 사용되는 트랜잭션 전파 속성
+- 진행 중인 트랜잭션이 없으면 새로 시작하고, 이미 시작된 트랜잭션이 있으면 이에 참여함
+- 다양한 방식으로 트랜잭션 결합 가능
+- ex ) -> A, B, A->B, B->A 모두 가능
+- DefaultTransactionDefinition의 트랜잭션 전파 속성이 바로 이 PROPAGATION_REQUIRED.
+##### PROPAGATION_REQUIRES_NEW
+- 항상 새로운 트랜잭션을 시작함.
+##### PROPAGATION_NOT_SUPPORTED
+- 트랜잭션 없이 동작함 
+- -> 트랜잭션 경계설정은 보통 AOP를 이용해 한 번에 많은 메소드를 동시에 적용 하는데,
+- -> 특별한 메소드만 트랜잭션 적용에 제외할 떄 사용. (특정 메소드의 트랜잭션 전파속성만 이 속성으로.)
+#### getTransaction()
+- 트랜잭션 매니저를 통해 트랜잭션을 시작하려고 할 때 getTransaction()이라는 메소드를 사용하는 이유가
+- -> 바로 이 트랜잭션 전파 속성이 있기 때문. 
+- -> getTransactino() 메소드는 항상 트랜잭션을 새로 시작하는 것이 아님!
+- -> 트랜잭션 전파 속성과 현재 진행중 트랜잭션 존재 여부에 따라 새로 시작할수도, 참여할 수도.
+
+### 격리수준
+- 모든 DB 트랜잭션은 격리수준(isolation level)을 갖고 있어야함.
+- 서버환경에서는 여러개의 트랜잭션이 동시에 진행도리 수 있음
+- 성능을 위해 격리수준을 조정해 가능한 많은 트랜잭션을 동시에 진행 시키면서 문제 발생하지 않게 제어 필요
+- 격리수준은 기본적으로 DB에 설정되어 있지만 JDBC 드라이버나 DataSource등에서 재설정 할 수 있고, 
+- 필요하다면 트랜잭션 단위로 격리수준을 조정할 수 있다. 
+- DefaultTransactionDefinition에 설정된 격리수준은 ISOLATION_DEFAULT
+- -> DataSource에 설정되어 있는 디폴트 격리수준을 그대로 따른다는것.
 - 
