@@ -2194,18 +2194,100 @@ public class TransactionAdvice implements MethodInterceptor {
 - 트랜잭션 없이 동작함 
 - -> 트랜잭션 경계설정은 보통 AOP를 이용해 한 번에 많은 메소드를 동시에 적용 하는데,
 - -> 특별한 메소드만 트랜잭션 적용에 제외할 떄 사용. (특정 메소드의 트랜잭션 전파속성만 이 속성으로.)
-#### getTransaction()
+##### getTransaction()
 - 트랜잭션 매니저를 통해 트랜잭션을 시작하려고 할 때 getTransaction()이라는 메소드를 사용하는 이유가
 - -> 바로 이 트랜잭션 전파 속성이 있기 때문. 
 - -> getTransactino() 메소드는 항상 트랜잭션을 새로 시작하는 것이 아님!
 - -> 트랜잭션 전파 속성과 현재 진행중 트랜잭션 존재 여부에 따라 새로 시작할수도, 참여할 수도.
 
-### 격리수준
+#### 격리수준
 - 모든 DB 트랜잭션은 격리수준(isolation level)을 갖고 있어야함.
-- 서버환경에서는 여러개의 트랜잭션이 동시에 진행도리 수 있음
+- 서버환경에서는 여러개의 트랜잭션이 동시에 진행될 수 있음
 - 성능을 위해 격리수준을 조정해 가능한 많은 트랜잭션을 동시에 진행 시키면서 문제 발생하지 않게 제어 필요
 - 격리수준은 기본적으로 DB에 설정되어 있지만 JDBC 드라이버나 DataSource등에서 재설정 할 수 있고, 
 - 필요하다면 트랜잭션 단위로 격리수준을 조정할 수 있다. 
 - DefaultTransactionDefinition에 설정된 격리수준은 ISOLATION_DEFAULT
 - -> DataSource에 설정되어 있는 디폴트 격리수준을 그대로 따른다는것.
-- 
+#### 제한수준
+- 트랜잭션을 수행하는 제한시간
+- DefaultTrasactionDefinition의 기본 설정은 제한시간이 없는 것.
+- 제한시간은 트랜잭션을 직접 시작할 수 있는 PROPAGATION_REQUIRED나 PROPAGATION_REQUIRES_NEW와 함꼐 사용해야 의미가 있음. 
+#### 읽기전용
+- 읽기전용으로 설정해두면 트랜잭션 내에서 데이터를 조작하느 ㄴ시도를 막아줄 수 있음
+- 또한 데이터 엑세스 기술에 따라 성능이 향상될 수도 있음
+
+#### 트랜잭션 정의 수정 방법
+- 트랜잭션 정의 수정하고 싶다면 DefaultTransactionDefinition을 사용하는 대신에
+- -> 외부에서 정의된 TransactionDefinition 오브젝트를 DI 받아서 사용하도록 만들면 됨
+- TransactionDefinition 타입의 빈을 정의해두면 프로퍼티를 통해 원하는 속성 지정할 수 있음
+- -> 하지만 이 방법으로 트랜잭션 속성 변경하면 TrasacionAdvice를 사용하는 모든 트랜잭션 속성이 한꺼번에 바뀌는 문제 발생
+- -> 원하는 메소드만 선택해서 독자적인 트랜잭션 정의 방법?
+
+### 트랜잭션 인터셉터와 트랜잭션 속성
+- 메소드별로 다른 트랜잭션 정의를 적용하려면 어드바이스의 기능 확장 필요
+- 초기에 TransactionHandler에서 메소드 이름을 이용해 트랜잭션 적용 여부 판단 한 것처럼 메소드 이름 패턴에 따라 다른 트랜잭션 정의가 적용 되도록
+
+#### TransactionInterceptor
+- 스프링에서 제공하는 트랜잭션 경계설정 어드바이스
+- TransactionInterceptor는 기존에 만들었던 TransactionAdvice와 다르지 않음
+- 트랜잭션 정의 메소드 이름 패턴을 이용해서 다르게 지정할 수 있는 방법을 추가로 제공할 뿐임
+- TransactionInterceptor는 **PlatformTrasactionManager와 Properties타입의 두가지 프로퍼티**를 갖고 있음
+##### TransactionAttribute
+- TransactionInterceptor의 Properties타입의 프로퍼티의 이름 transacionAttributes
+- TransactionDefinition의 네가지 기존 항목에 rollbackOn()이라는 메소드를 하나 더 갖고 있는 TransactionAttibute
+- 기존 코드
+```java
+public class TransactionAdvice implements MethodInterceptor {
+   //..
+    @Override
+    public Object invoke(MethodInvocation invocation) throws Throwable {
+        TransactionStatus status =
+                this.transactionManager.getTransaction(new DefaultTransactionDefinition()); //트랜잭션정의 네가지
+        try{
+            Object ret = invocation.proceed();
+            this.transactionManager.commit(status);
+            return ret;
+        } catch (RuntimeException e){ // 롤백 대상 예외 종류 (런타임 예외)
+            this.transactionManager.rollback(status);
+            throw e;
+        }
+    }
+}
+```
+- -> 체크 예외를 던지는 경우에 문제가 될 수 있음
+- -> 하지만 체크 예외 중 일부 체크 예외의 경우 DB 트랜잭션 커밋시켜야하는 경우가 있음 
+- 스프링이 제공하는 **TransactionInterceptor에는 기본적으로 두가지 종류의 예외처리 방식** 있음
+- -> 기본적으로 런타임예외에서 트랜잭션 롤백, 체크예외에서는 트랜젝션 커밋
+- -> rollbackOn()이라는 속성을 둬서 기본 원칙과 다른 예외처리를 추가적으로 가능하게 해줌. 
+- -> TransactionInterceptor는 이런 TransactionAttribute를 Properties라는 일종의 맵 타입 오브젝트로 전달받음. 
+- -> 메소드 패턴에 따라 각기 다른 트랜잭션 속성을 부여할 수 있게 컬렉션이 사용됨.
+
+#### 메소드 이름 패턴을 이용한 트랜잭션 속성 지정
+- Properties타입의 tranasactionAttributes 프로퍼티는 메소드 패턴과 트랜잭션 속성을 키와 값으로 값는 컬렉션
+- 트랜잭션 속성은 다음과 같은 문자열로 정의 가능
+```
+ex)
+트랜잭션 전파방식    격리수준         읽기전용    제한시간     체크예외 중 롤백 대상  런타임 예외 중 롤백 제외 대상
+PROPAGATION_NAME, ISOLATION_NAME, readOnly, timeout_NNNN, -Excetpion1, +Exception2
+```
+- 위에서 트랜잭션 전파 항목만 필수고 나머지 생략 가능. 
+- 생략하면 DefaultTransactionDefinition에 설정된 디폴트 속성ㅇ ㅣ부여됨
+= +, -로 기본 원칙 따르지 않는 예외를 정해주는 것.
+- 아래는 메소드 이름 패턴과 문자열로 된 트랜잭션 속성을 이용해서 정의한 TransactionInterceptor 타입 빈의 예.
+```xml
+<bean id="transacionAdvice" class="org.springframework.transaction.interceptor.TransactionInterceptor">
+  <property name="trasactiopManager" ref="transactionManager"/>
+  <property name="trasactionAttributes">
+    <props>
+      <prop key="get*">PROPAGATION_REQUIRED, readOnly, timout_30</prop>
+      <prop key="upgrade*">PROPAGATION_REQUIRES_NEW, ISOLATION_SERIALIZABLE</prop>
+      <prop key="*">PROPAGATION_REQUIRED</prop>
+    </props>
+  </property>
+</bean>
+```
+- 세가지 메소드 이름 패턴에 대한 트랜잭션 속성이 정의되어 있음. 
+- 읽기전용이 아닌 트랜잭셕 속성을 가진 메소드에서 읽기전용 속성을 가진 get으로 시작하는 메소드를 호출한다면?
+- -> get메소드는 PROPAGATION_REQUIRED이기 떄문에 다른 트랜잭션이 시작되어 있으면 그 트랜잭션에 참여
+- -> DB에 쓰기 작업이 진행된 채로 읽기전용 트랜잭션 속성을 가진 작업이 뒤따르게 되어 충돌이 일어나지 않을까?
+- -> **다행히 트랜잭션 속성 중 readOnly나 timeout등은 트랜잭션이 처음 시작될때가 아니라면 적용되지 않음!**
