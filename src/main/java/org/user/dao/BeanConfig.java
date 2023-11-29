@@ -8,9 +8,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.SimpleDriverDataSource;
+
+import org.springframework.transaction.interceptor.TransactionInterceptor;
 import org.user.service.*;
 
 import javax.sql.DataSource;
+import java.util.Properties;
 
 @Configuration
 public class BeanConfig {
@@ -33,12 +36,29 @@ public class BeanConfig {
         return dataSourceTransactionManager;
     }
 
-    @Bean //부가기능(어드바이스)
-    public TransactionAdvice transactionAdvice(){
-        TransactionAdvice transactionAdvice = new TransactionAdvice();
-        transactionAdvice.setTransactionManager(transactionManager());
-        return transactionAdvice;
+    // 스프링에서 제공하는 트랜잭션 경계설정 어드바이스로 대체
+    @Bean
+    public TransactionInterceptor transactionAdvice(){
+        TransactionInterceptor transactionInterceptor = new TransactionInterceptor();
+        transactionInterceptor.setTransactionManager(transactionManager());
+        Properties transactionAttributes = new Properties();
+        // get* 메소드에 대한 설정
+        transactionAttributes.setProperty("get*", "PROPAGATION_REQUIRED, readOnly, timeout_30");
+        // upgrade* 메소드에 대한 설정
+        transactionAttributes.setProperty("upgrade*", "PROPAGATION_REQUIRES_NEW, ISOLATION_SERIALIZABLE");
+        // 나머지 메소드에 대한 기본 설정
+        transactionAttributes.setProperty("*", "PROPAGATION_REQUIRED");
+        transactionInterceptor.setTransactionAttributes(transactionAttributes);
+        return transactionInterceptor;
     }
+
+
+//    @Bean //부가기능(어드바이스)
+//    public TransactionAdvice transactionAdvice(){
+//        TransactionAdvice transactionAdvice = new TransactionAdvice(); // MethodInterceptor을 구현하여 어드바이스로 생성
+//        transactionAdvice.setTransactionManager(transactionManager());
+//        return transactionAdvice;
+//    }
 
 //    @Bean //포인트컷(메소드선정알고리즘) // 포인트컷 표현식을 사용하여 직접 만든 포인트컷 구현클래스는 필요 없음
 //    public NameMatchMethodPointcut transactionPointcut(){
