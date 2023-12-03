@@ -2415,15 +2415,14 @@ class ex {
 #### 트랜잭션 경계설정의 일원화 *** (서비스 계층에 트랜잭션 경계설정 일원화 + DAO메소드 서비스계층에 위임!!!)
 
 - 일반적으로 특정 계층의 경계를 트랜잭션 경계와 일치시키는 것이 바람직함.
-- -> 비즈니스 로직을 담고 있는 서비스 계층 오브젝트의 메소드가 트랜잭션 경계를 부여하기에 가장 적절함.
-- -> 서비스 계층을 트랜잭션이 시작되고 종료되는 경계로 정했다면, 테스트 같은 특별한 경우가 아니면
-- -> 다른 계층이나 모듈에서 DAO에 직접 접근하는 것은 차단해야함.
+- -> 비즈니스 로직을 담고 있는 **서비스 계층 오브젝트의 메소드가 트랜잭션 경계를 부여하기에 가장 적절**함.
+- -> 서비스 계층을 트랜잭션이 시작되고 종료되는 경계로 정했다면, 테스트 같은 특별한 경우가 아니면 다른 계층이나 모듈에서 DAO에 직접 접근하는 것은 차단해야함.
 - --> 트랜잭션은 보통 서비스 계층의 메소드 조합을 통해 만들어지기에 DAO가 제공하는 주요 기능은 서비스 계층에 **위임메소드**를 만들어둘 필요가 있음.
 - ex)
 - -> UserService가 아니라면 UserDao에 직접접근하지않고 UserService의 메소드를 이용하는 편이 좋음
 - -> 특히 둥록, 수정, 삭제가 포함된 작업이라면 다른 모듈의 DAO를 직접 이용하는 것은 지양
 - -> 다른 모듈의 서비스 계층을 통해 접근해야함
-- UserDao인터페이스에 정의된 6개의 메소드 중에서 이미 서비스 계층에 부가적인 로직을 담아 추가한 add() 제외한 나머지 5개가 새로 추가할 메소드 후보메소드
+- UserDao인터페이스에 정의된 6개의 메소드 중에서 이미 서비스 계층에 부가적인 로직을 담아 추가한 add() 제외한 나머지 5개가 새로 추가할 후보 메소드
 - -> 단순 레코드 개수 리턴 하는 getCount()제외 나머지 독자적인 트랜잭션을 가지고 사용될 가능성이 높음!
 
 ```java
@@ -2457,9 +2456,9 @@ public interface UserService {
 ```
 
 ```java
-public class UserServiceImpl implements UserService { 
+public class UserServiceImpl implements UserService {
     //..
-    public void add(User user) {
+    public void add(User user) { // 단순 dao crud 위임 이상의 로직 
         if (user.getLevel() == null) {
             user.setLevel(Level.BASIC);
         }
@@ -2467,3 +2466,131 @@ public class UserServiceImpl implements UserService {
     }
 }
 ```
+
+#### 서비스 빈에 적용되는 포인트컷 표현식 등록
+```java
+class ex {
+    // 포인트컷 표현식을 사용한 빈 설정
+    @Bean
+    public AspectJExpressionPointcut transactionPointcut() {
+        AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();
+        // pointcut.setExpression("execution(* *..*ServiceImpl.upgrade*(..))"); 
+        pointcut.setExpression("bean(*Service)"); // 모든 서비스 로직에 적용
+        return pointcut;
+    }
+}
+```
+
+#### 트랜잭션 속성을 가진 트랜잭션 어드바이스 등록
+- TransactionAdvice 클래스로 정의했떤 어드바이스 빈을
+- -> 스프링의 TransacionInterceptor를 이용하도록 변경
+```java
+class ex {
+  // 스프링에서 제공하는 트랜잭션 경계설정 어드바이스로 대체
+    @Bean
+    public TransactionInterceptor transactionAdvice(){
+        TransactionInterceptor transactionInterceptor = new TransactionInterceptor();
+        transactionInterceptor.setTransactionManager(transactionManager());
+        Properties transactionAttributes = new Properties();
+        // get* 메소드에 대한 설정
+        transactionAttributes.setProperty("get*", "PROPAGATION_REQUIRED, readOnly");
+        // 나머지 메소드에 대한 기본 설정
+        transactionAttributes.setProperty("*", "PROPAGATION_REQUIRED");
+        transactionInterceptor.setTransactionAttributes(transactionAttributes);
+        return transactionInterceptor;
+    }
+    
+//    @Bean //부가기능(어드바이스)
+//    public TransactionAdvice transactionAdvice(){
+//        TransactionAdvice transactionAdvice = new TransactionAdvice(); // MethodInterceptor을 구현하여 어드바이스로 생성
+//        transactionAdvice.setTransactionManager(transactionManager());
+//        return transactionAdvice;
+//    }
+}
+```
+
+#### 트랜잭션 속성 테스트 
+- get으로 시작하는 메소드에는 읽기 전용 속성이 true로
+- -> **따라서 이 메소드를 경계로 시작하는 트랜잭션에는 쓰기 작업이 허용되지 않음 !!!**
+```java
+class test{
+  public static class TestUserService extends UserServiceImpl {
+    @Override //트랜잭션 경계설정 테스트 -> get으로 시작하는 메소드를 오버라이드
+    public List<User> getAll(){
+      for(User user : super.getAll()){
+        super.update(user); //강제로 쓰기시도 -> 여기서 읽기 전용 속성으로 인한 예외가 발생해야함.
+      }
+      return null;
+    }
+    //..
+  }
+
+  @Test(expected = TransientDataAccessException.class) // 일단 어떤 예외가 던져질지 모르므로 처음엔 expecdted 없이 작성 
+  public void readOnlyTransactionAttribute(){
+    testUserService.getAll(); // 트랜잭션 속성이 제대로 적용 됐다면 여기서 읽기전용 속성을 위반했기 때문에 예외 발생해야함. 
+  }
+}
+```
+
+## 애노테이션 트랜잭션 속성과  포인트컷 
+- 메소드별로 세밀한 트랜잭션 속성의 제어가 필요한 경우
+- **직접 타깃에 트랜잭션 속성 정보를 가진 애노테이션을 지정**하는 방법
+
+### 트랜잭션 애노테이션
+#### @Transactional --> (포인트컷 + 트랜잭션 속성)
+-> 런타임때도 애노테이션 정보를 리플렉션을 통해 트랜잭션 관련 사항을 얻음
+```java
+// Transaction 애노테이션 자바코드
+package org.springframework.transaction.annotation;
+// ..
+// 애노테이션을 사용할 대상을 지정함 -> 여기에 사용된 메소드와 타입(클래스&인터페이스)처럼 한 개 이상의 대상을 지정할 수 있음.
+
+import org.springframework.transaction.TransactionDefinition;
+
+import java.lang.annotation.*;
+
+@Target({ElementType.METHOD, ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME) // 애노테이션 정보가 언제까지 유지되는지. -> 런타임때도 애노테이션 정보를 리플렉션을 통해 얻음
+@Inherited // 상속을 통해서도 애노테이션 정보 얻을 수 있음
+@Documented
+public @interface Transactional { // 트랜잭션 속성의 모든 항목을 엘리먼트로 지정가능. 디폴트값이 설정되어 모두 생략 가능.
+  String value() default "";
+  Propagation propagation() default Propagation.REQUIRED;
+  Isolation isolation() default Isolation.DEFAULT;
+  int timeout() default TransactionDefinition.TIMEOUT_DEFAULT;
+  boolean readOnly() default false;
+  Class<? extends Throwable>[] rollbackFor() default {};
+  String[] rollbackForClassName() default{};
+  Class<? extends Throwable>[] noRollbackFor() default {};
+  String[] noRollbackForClassName() default {};
+}
+```
+- @Transactional 애노테이션의 타깃은 메소드와 타입.
+- -> 메소드, 클래스, 인터페이스에 사용
+- @Tranasactional 애노테이션을 트랜잭션 속성 정보로 사용하면 
+- -> 스프링은 @Trasacational이 부여된 모든 오브젝트를 자동으로 타깃 오브젝트로 지정함.
+- -> 이때 사용되는 포인트컷은 TransactionAttributeSourcePointcut
+- TransactionAttributeSourcePointcut은 스스로 표현식과 같은 선정기준을 갖고 있진 않음
+- -> 대신 **@Transactional이 타입 레벨이든 메소드 레벨이든 상관없이 부여된 빈 오브젝트를 모두 찾아서 포인트컷 선정 결과로 돌려줌**
+- --> **@Transacational은 기본적으로 트랜잭션 속성을 정의하는 것이지만, 동시에 포인트컷의 자동등록에도 사용됨**
+
+#### 트랜잭션 속성을 이용하는 포인트컷 
+![](img/img_38.png)
+- @Transactional 애노테이션을 사용했을 떄 어드바이저의 동작방식. 
+- org.springframework.transaction.interceptor.TransactionInterceptor
+- -> **TransactionInterceptor**는 메소드 이름 패턴을 통해 부여되는 일관적인 트랜잭션 속성 정보 대신에 
+- --> @Transactional **애노테이션의 엘리먼트에서 트랜잭션 속성을 가져오는 AnnotaionTransactionAttributeSource**를 사용함!
+- -> @Transactional은 메소드마다 다르게 설정할 수 있으므로 매우 유연한 트랜잭션 속성 설정이 가능해짐. 
+- -> 동시에 **포인트컷도 @Transactional을 통한 트랜잭션 속성 정보를 참조**하도록 만듬
+- -> @Transacational로 트랜잭션 속성이 부여된 오브젝트라면 포인트컷의 선정 대상이기도 하기 때문. 
+- --> TransactionAttributeSourcePointcut
+
+#### @Transactional 주의점 (포인트컷 + 트랜잭션 속성)
+- @Trasactional을 사용하여 포인트컷과 트랜잭션 속성을 한 번에 지정할 수 있음!
+- -> 트랜잭션 부가기능 적용단위는 메소드 -> 메소드마다 @Transacational을 부여하고 속성 지정 가능
+- -> 유연한 속성제어가 가능하지만, 코드가 지저분해지고 동일한 속성정보에 대해 반복적으로 애노테이션 부여하는 바람직한 결과를 가져올 수도 있음. 
+
+#### 대체 정책
+- 그래서 스프링은 **@Transactional을 적용할 떄 4단계의 대체(fallback) 정책**을 이용하게 해줌
+- -> 메소드의 속성을 확인할 때 타깃 메소드, 타깃 클래스, 선언 메소드, 선언 타입(클래스,인터페이스)의 순서에 따라서
+- -> @Transactional이 적용됐는지 차례로 확인하고, 가장 먼저 발견되는 속성 정보를 사용하게 하는 방법. 

@@ -8,9 +8,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.SimpleDriverDataSource;
-
 import org.springframework.transaction.interceptor.TransactionInterceptor;
-import org.user.service.*;
+import org.user.service.UserServiceImpl;
+import org.user.service.UserServiceTest;
 
 import javax.sql.DataSource;
 import java.util.Properties;
@@ -34,6 +34,7 @@ public class BeanConfig {
         DataSourceTransactionManager dataSourceTransactionManager
                 = new DataSourceTransactionManager(dataSource());
         return dataSourceTransactionManager;
+
     }
 
     // 스프링에서 제공하는 트랜잭션 경계설정 어드바이스로 대체
@@ -43,9 +44,7 @@ public class BeanConfig {
         transactionInterceptor.setTransactionManager(transactionManager());
         Properties transactionAttributes = new Properties();
         // get* 메소드에 대한 설정
-        transactionAttributes.setProperty("get*", "PROPAGATION_REQUIRED, readOnly, timeout_30");
-        // upgrade* 메소드에 대한 설정
-        transactionAttributes.setProperty("upgrade*", "PROPAGATION_REQUIRES_NEW, ISOLATION_SERIALIZABLE");
+        transactionAttributes.setProperty("get*", "PROPAGATION_REQUIRED, readOnly");
         // 나머지 메소드에 대한 기본 설정
         transactionAttributes.setProperty("*", "PROPAGATION_REQUIRED");
         transactionInterceptor.setTransactionAttributes(transactionAttributes);
@@ -72,7 +71,8 @@ public class BeanConfig {
     @Bean
     public AspectJExpressionPointcut transactionPointcut(){
         AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();
-        pointcut.setExpression("execution(* *..*ServiceImpl.upgrade*(..))");
+//        pointcut.setExpression("execution(* *..*ServiceImpl.upgrade*(..))");
+        pointcut.setExpression("bean(*Service)"); // 모든 서비스 로직에 적용
         return pointcut;
     }
 
