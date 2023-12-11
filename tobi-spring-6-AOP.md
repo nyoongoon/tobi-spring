@@ -2468,6 +2468,7 @@ public class UserServiceImpl implements UserService {
 ```
 
 #### 서비스 빈에 적용되는 포인트컷 표현식 등록
+
 ```java
 class ex {
     // 포인트컷 표현식을 사용한 빈 설정
@@ -2482,13 +2483,15 @@ class ex {
 ```
 
 #### 트랜잭션 속성을 가진 트랜잭션 어드바이스 등록
+
 - TransactionAdvice 클래스로 정의했떤 어드바이스 빈을
 - -> 스프링의 TransacionInterceptor를 이용하도록 변경
+
 ```java
 class ex {
-  // 스프링에서 제공하는 트랜잭션 경계설정 어드바이스로 대체
+    // 스프링에서 제공하는 트랜잭션 경계설정 어드바이스로 대체
     @Bean
-    public TransactionInterceptor transactionAdvice(){
+    public TransactionInterceptor transactionAdvice() {
         TransactionInterceptor transactionInterceptor = new TransactionInterceptor();
         transactionInterceptor.setTransactionManager(transactionManager());
         Properties transactionAttributes = new Properties();
@@ -2499,7 +2502,7 @@ class ex {
         transactionInterceptor.setTransactionAttributes(transactionAttributes);
         return transactionInterceptor;
     }
-    
+
 //    @Bean //부가기능(어드바이스)
 //    public TransactionAdvice transactionAdvice(){
 //        TransactionAdvice transactionAdvice = new TransactionAdvice(); // MethodInterceptor을 구현하여 어드바이스로 생성
@@ -2509,36 +2512,42 @@ class ex {
 }
 ```
 
-#### 트랜잭션 속성 테스트 
+#### 트랜잭션 속성 테스트
+
 - get으로 시작하는 메소드에는 읽기 전용 속성이 true로
 - -> **따라서 이 메소드를 경계로 시작하는 트랜잭션에는 쓰기 작업이 허용되지 않음 !!!**
-```java
-class test{
-  public static class TestUserService extends UserServiceImpl {
-    @Override //트랜잭션 경계설정 테스트 -> get으로 시작하는 메소드를 오버라이드
-    public List<User> getAll(){
-      for(User user : super.getAll()){
-        super.update(user); //강제로 쓰기시도 -> 여기서 읽기 전용 속성으로 인한 예외가 발생해야함.
-      }
-      return null;
-    }
-    //..
-  }
 
-  @Test(expected = TransientDataAccessException.class) // 일단 어떤 예외가 던져질지 모르므로 처음엔 expecdted 없이 작성 
-  public void readOnlyTransactionAttribute(){
-    testUserService.getAll(); // 트랜잭션 속성이 제대로 적용 됐다면 여기서 읽기전용 속성을 위반했기 때문에 예외 발생해야함. 
-  }
+```java
+class test {
+    public static class TestUserService extends UserServiceImpl {
+        @Override //트랜잭션 경계설정 테스트 -> get으로 시작하는 메소드를 오버라이드
+        public List<User> getAll() {
+            for (User user : super.getAll()) {
+                super.update(user); //강제로 쓰기시도 -> 여기서 읽기 전용 속성으로 인한 예외가 발생해야함.
+            }
+            return null;
+        }
+        //..
+    }
+
+    @Test(expected = TransientDataAccessException.class) // 일단 어떤 예외가 던져질지 모르므로 처음엔 expecdted 없이 작성 
+    public void readOnlyTransactionAttribute() {
+        testUserService.getAll(); // 트랜잭션 속성이 제대로 적용 됐다면 여기서 읽기전용 속성을 위반했기 때문에 예외 발생해야함. 
+    }
 }
 ```
 
-## 애노테이션 트랜잭션 속성과  포인트컷 
+## 애노테이션 트랜잭션 속성과  포인트컷
+
 - 메소드별로 세밀한 트랜잭션 속성의 제어가 필요한 경우
 - **직접 타깃에 트랜잭션 속성 정보를 가진 애노테이션을 지정**하는 방법
 
 ### 트랜잭션 애노테이션
+
 #### @Transactional --> (포인트컷 + 트랜잭션 속성)
+
 -> 런타임때도 애노테이션 정보를 리플렉션을 통해 트랜잭션 관련 사항을 얻음
+
 ```java
 // Transaction 애노테이션 자바코드
 package org.springframework.transaction.annotation;
@@ -2554,87 +2563,184 @@ import java.lang.annotation.*;
 @Inherited // 상속을 통해서도 애노테이션 정보 얻을 수 있음
 @Documented
 public @interface Transactional { // 트랜잭션 속성의 모든 항목을 엘리먼트로 지정가능. 디폴트값이 설정되어 모두 생략 가능.
-  String value() default "";
-  Propagation propagation() default Propagation.REQUIRED;
-  Isolation isolation() default Isolation.DEFAULT;
-  int timeout() default TransactionDefinition.TIMEOUT_DEFAULT;
-  boolean readOnly() default false;
-  Class<? extends Throwable>[] rollbackFor() default {};
-  String[] rollbackForClassName() default{};
-  Class<? extends Throwable>[] noRollbackFor() default {};
-  String[] noRollbackForClassName() default {};
+    String value() default "";
+
+    Propagation propagation() default Propagation.REQUIRED;
+
+    Isolation isolation() default Isolation.DEFAULT;
+
+    int timeout() default TransactionDefinition.TIMEOUT_DEFAULT;
+
+    boolean readOnly() default false;
+
+    Class<? extends Throwable>[] rollbackFor() default {};
+
+    String[] rollbackForClassName() default {};
+
+    Class<? extends Throwable>[] noRollbackFor() default {};
+
+    String[] noRollbackForClassName() default {};
 }
 ```
+
 - @Transactional 애노테이션의 타깃은 메소드와 타입.
 - -> 메소드, 클래스, 인터페이스에 사용
-- @Tranasactional 애노테이션을 트랜잭션 속성 정보로 사용하면 
+- @Tranasactional 애노테이션을 트랜잭션 속성 정보로 사용하면
 - -> 스프링은 @Trasacational이 부여된 모든 오브젝트를 자동으로 타깃 오브젝트로 지정함.
 - -> 이때 사용되는 포인트컷은 TransactionAttributeSourcePointcut
 - TransactionAttributeSourcePointcut은 스스로 표현식과 같은 선정기준을 갖고 있진 않음
 - -> 대신 **@Transactional이 타입 레벨이든 메소드 레벨이든 상관없이 부여된 빈 오브젝트를 모두 찾아서 포인트컷 선정 결과로 돌려줌**
 - --> **@Transacational은 기본적으로 트랜잭션 속성을 정의하는 것이지만, 동시에 포인트컷의 자동등록에도 사용됨**
 
-#### 트랜잭션 속성을 이용하는 포인트컷 
+#### 트랜잭션 속성을 이용하는 포인트컷
+
 ![](img/img_38.png)
-- @Transactional 애노테이션을 사용했을 떄 어드바이저의 동작방식. 
+
+- @Transactional 애노테이션을 사용했을 떄 어드바이저의 동작방식.
 - org.springframework.transaction.interceptor.TransactionInterceptor
-- -> **TransactionInterceptor**는 메소드 이름 패턴을 통해 부여되는 일관적인 트랜잭션 속성 정보 대신에 
+- -> **TransactionInterceptor**는 메소드 이름 패턴을 통해 부여되는 일관적인 트랜잭션 속성 정보 대신에
 - --> @Transactional **애노테이션의 엘리먼트에서 트랜잭션 속성을 가져오는 AnnotaionTransactionAttributeSource**를 사용함!
-- -> @Transactional은 메소드마다 다르게 설정할 수 있으므로 매우 유연한 트랜잭션 속성 설정이 가능해짐. 
+- -> @Transactional은 메소드마다 다르게 설정할 수 있으므로 매우 유연한 트랜잭션 속성 설정이 가능해짐.
 - -> 동시에 **포인트컷도 @Transactional을 통한 트랜잭션 속성 정보를 참조**하도록 만듬
-- -> @Transacational로 트랜잭션 속성이 부여된 오브젝트라면 포인트컷의 선정 대상이기도 하기 때문. 
+- -> @Transacational로 트랜잭션 속성이 부여된 오브젝트라면 포인트컷의 선정 대상이기도 하기 때문.
 - --> TransactionAttributeSourcePointcut
 
 #### @Transactional 주의점 (포인트컷 + 트랜잭션 속성)
+
 - @Trasactional을 사용하여 포인트컷과 트랜잭션 속성을 한 번에 지정할 수 있음!
 - -> 트랜잭션 부가기능 적용단위는 메소드 -> 메소드마다 @Transacational을 부여하고 속성 지정 가능
-- -> 유연한 속성제어가 가능하지만, 코드가 지저분해지고 동일한 속성정보에 대해 반복적으로 애노테이션 부여하는 바람직한 결과를 가져올 수도 있음. 
+- -> 유연한 속성제어가 가능하지만, 코드가 지저분해지고 동일한 속성정보에 대해 반복적으로 애노테이션 부여하는 바람직한 결과를 가져올 수도 있음.
 
 #### 대체 정책
+
 - 그래서 스프링은 **@Transactional을 적용할 떄 4단계의 대체(fallback) 정책**을 이용하게 해줌
 - -> 메소드의 속성을 확인할 때 타깃 메소드, 타깃 클래스, 선언 메소드, 선언 타입(클래스,인터페이스)의 순서에 따라서
-- -> @Transactional이 적용됐는지 차례로 확인하고, 가장 먼저 발견되는 속성 정보를 사용하게 하는 방법. 
+- -> @Transactional이 적용됐는지 차례로 확인하고, 가장 먼저 발견되는 속성 정보를 사용하게 하는 방법.
 
 ```java
 // 4. 선언 타입
-public interface Service{
-  // 3. 선언 메소드
-  public void method1();
+public interface Service {
+    // 3. 선언 메소드
+    public void method1();
 }
+
 // 2. 타깃 클래스
-public class ServiceImpl implements Service{
+public class ServiceImpl implements Service {
     // 1. -> 타깃 메소드
-    public void method1(){} 
+    public void method1() {
+    }
 }
 ```
 
 #### 트랜잭션 애노테이션 사용을 위한 설정
+
 - @Transaction 사용을 위한 설정은 매우 간단
 
 ```xml
 
-<tx:annotation-driven />
+<tx:annotation-driven/>
 ```
 
 ### 트랜잭션 애노테이션 적용
-- 인터페이스 방식의 프록시를 사용하는 경우에는 인터페이스 @Transaction을 적용해도 상관없음. 
 
+- 인터페이스 방식의 프록시를 사용하는 경우에는 인터페이스 @Transaction을 적용해도 상관없음.
 
 ## 트랜잭션 지원 테스트
-- 선언적 트랜잭션과 트랜잭션 전파 속성
-- AOP를 이용해 코드 외부에서 트랜잭션의 기능을 부여해주고 속성을 지정할 수 있게 하는 방법을 선언적 트랜잭션이라고 함. 
 
-### 트랜잭션 동기화와 테스트 
+- 선언적 트랜잭션과 트랜잭션 전파 속성
+- AOP를 이용해 코드 외부에서 트랜잭션의 기능을 부여해주고 속성을 지정할 수 있게 하는 방법을 선언적 트랜잭션이라고 함.
+
+### 트랜잭션 동기화와 테스트
+
 - AOP덕분에 프록시를 이용한 트랜잭션 부가기능을 간단하게 적용 가능
 - 트랜잭션 추상화 덕분에 기술에 상관없이 트랜잭셕으로 묶어 추상 레벨에서 관리 가능
 
 #### 트랜잭션 매니저와 트랜잭션 동기화
+
 - 트랜잭선 추상화 기술의 핵심은 **트랜잭션 매니저와 트랜잭션 동기화**
 - PlatformTransactinoManager 인터페이스를 구현한 트랜잭션 매니저를 통해 구체적인 트랜잭션 기술의 종류에 상관없이 일관적인 트랜잭션 제어가 가능해짐
 - 트랜잭션 동기화 기술이 있었기에 트랜잭션 정보를 저장소에 보관해뒀다가 DAO에 공유 가능
 - -> 트랜잭션 동기화 기술은 트랜잭션 전파를 위해서도 중요한 역할을 함.
 - --> 진행중인 트랜잭션이 있는지 확인하고 트랜잭션 전파 속성에 따라서 이에 참여할 수 있도록 만들어 주는 것도 트랜잭션 동기화 기술 덕분
 
-#### 트랜잭션 매니저를 이용한 테스트용 트랜잭션 제어 
+#### 트랜잭션 매니저를 이용한 테스트용 트랜잭션 제어
+
 - 테스트 메소드에서 서비스 메소드를 호출하기 전에 트랜잭션을 미리 시작해보기
 - -> 트랜잭션 매니저를 이용해 트랜잭션을 시작시키고 이를 동기화해주기.
+- -> 먼저 트랜잭션 정의를 담은 오브젝트를 만들고 이를 트랜잭션 매니저에게 제공하면서 새로운 트랜잭션을 요청하면됨.
+
+```java
+class ex {
+    @Test
+    public void transactionSync() {
+        DefaultTransactionDefinition txDefinition = new DefaultTransactionDefinition();
+        TransacationStatus txStatus = transationManager.getTransaction(txDifinition);
+        userService.deleteAll();
+        userService.add(users.get(0));
+        userService.add(users.get(1));
+        transactionManager.commit(txStatus); // 앞에서 시작한 트랜잭션을 커밋. 
+    }
+}
+```
+
+#### 트랜잭션 동기화 검증
+
+- 트랜잭션 속성 중에서 읽기전용과 제한시간 등은 처음 트랜잭션이 시작할 때만 적용되고 그 이후에 참여하는 메소드의 속성은 무시됨
+- 즉 deleteAll()의 트랜잭션 속성은 쓰기 가능으로 되어 있지만 앞에서 트랜잭션이 읽기전용이라고하면 deleteAll()의 모든 작업도 읽기전용 트랜잭션이 적용된 상태에서 진행
+
+```java
+class ex {
+    @Test
+    public void transactionSync() {
+        DefaultTransactionDefinition txDefinition = new DefaultTransactionDefinition();
+        txDefinition.setReadOnly(true);
+        TransactionStatus txStatus = transactionManager.getTransactino(txDefinition);
+        userService.deleteAll(); // 테스트코드에서 시작한 트랜잭션에 참여한다면 읽기전용 속성을 위반했으니 예외 발생.
+    }
+}
+```
+
+- -> 스프링의 트랜잭션 추상화가 제공하는 트랜잭션 동기화와
+- -> 트랜잭션 전파 속성 덕분에 테스트로 트랜잭션으로 묶을 수 있음
+
+##### JdbcTemplate
+
+- JdbcTemplate은 트랜잭션이 시작된 것이 있으면 그 트랜잭션에 자동으로 참여하고, 없으면 트랜잭션 없이 자동커밋모드로 JDBC작업을 수행
+- 개념은 조금 다른지만 JdbcTemplate의 메소드 단위로 마치 트랜잭션 전파속성이 REQUIRED인 것처럼 동작한다고 볼 수 있음
+
+```java
+class ex {
+    @Test
+    public void transacionSync() {
+        DefaultTransactionDefinition txDinition = new DefaultTransactionDefinition();
+        txDefinition.setReadOnly(true);
+        TransactionStatus txStatus = transactionManager.getTransacion(txDefinition);
+        userDao.deleteAll(); //JdbcTemplate을 통해 이미 시작된 트랜잭션이 있다면 자동으로 참여함. -> 예외발생
+    }
+}
+```
+
+##### 트랜잭션 롤백 테스트
+```java
+class ex {
+    @Test
+    public void transacionSync() {
+        userDao.deleteAll();
+        assertThat(userDao.getCount(), is(0)); // 초기상태 
+      
+      DefaultTransactionDefinition txDefinition = new DefaultTransactionDefinition();
+      TransactionStatus txStatus = transactionManager.getTrasaction(txDefinition);
+      
+      userService.add(users.get(0));
+      userService.add(users.get(1));
+      assertThat(userDao.getCount(), is(2));
+      
+      transactionManager.rollback(txStatus);//롤백
+      assertThat(userDao.getCount(), is(0));
+    }
+}
+```
+
+
+#### 롤백 테스트
+- 
