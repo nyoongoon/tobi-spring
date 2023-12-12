@@ -2721,26 +2721,80 @@ class ex {
 ```
 
 ##### 트랜잭션 롤백 테스트
+
 ```java
 class ex {
     @Test
     public void transacionSync() {
         userDao.deleteAll();
         assertThat(userDao.getCount(), is(0)); // 초기상태 
-      
-      DefaultTransactionDefinition txDefinition = new DefaultTransactionDefinition();
-      TransactionStatus txStatus = transactionManager.getTrasaction(txDefinition);
-      
-      userService.add(users.get(0));
-      userService.add(users.get(1));
-      assertThat(userDao.getCount(), is(2));
-      
-      transactionManager.rollback(txStatus);//롤백
-      assertThat(userDao.getCount(), is(0));
+
+        DefaultTransactionDefinition txDefinition = new DefaultTransactionDefinition();
+        TransactionStatus txStatus = transactionManager.getTrasaction(txDefinition);
+
+        userService.add(users.get(0));
+        userService.add(users.get(1));
+        assertThat(userDao.getCount(), is(2));
+
+        transactionManager.rollback(txStatus);//롤백
+        assertThat(userDao.getCount(), is(0));
     }
 }
 ```
 
-
 #### 롤백 테스트
-- 
+
+- 롤백 테스트는 DB 작업이 포함된 테스트가 수행되도 DB에 영향을 주지 않기 때문에 장점이 많음.
+
+### 테스트를 위한 트랜잭션 애노테이션
+
+#### @Transactional
+
+- 테스트에도 @Transactional을 적용할 수 있음.
+- 테스트 클래스 또는 메소드에 @Transactional 애노테이션을 부여해주면 아치 타깃 클래스나 인터페이스에 적용된 것처럼 테스트 메소드에
+- -> 트랜잭션 경계가 자동으로 설정됨.
+
+#### @Rollback
+
+- 테스트용 트랜잭션은 테스트가 끝나면 자동으로 롤백됨
+- 롤백 적용하고 싶지 않은 경우 @Rollback(false) -> 메소드 레벨에서 적용 가능
+
+#### @TransactionConfiguration
+
+- 클래스레벨에서 롤백false 설정하고 싶은 경우 -> @TransactionalConfiguration(defaultRollback=false)
+
+#### @Transactional(propagation=Propagation.NEVER)
+
+- 메소드에 부여하면 클래스레벨 무시하고 트랜잭션 시작하지 않음.
+
+## 정리
+
+- 트랜잭션 경계설정 기능을 성격이 다른 비즈니스 로직 클래스에서 분리하고 유연하게 적용할 수 있는 방법
+- -> 애플리케이션에 산재해서 나타나는 부가기능을 모듈화하는 AOP 기술을 알아봄
+- 트랜잭션 경계설정 코드를 분리해서 별도의 클래스로 만들고, 비즈니스 로직 클래스와 동일한 인터페이스를 구현하면 DI의 확장 기능을 이용해 클라이언틔 변경없이도 깔끔하게 분리된 트랜잭션 부가기능 만들 수 있음
+- 트랜잭션처럼 환경과 외부 리소스에 영향을 받는 코드를 분리하면 비즈니스 로직에만 충실한 테스트를 만들 수 잇음
+- **목 오브젝트**를 활용하면 의존관계 속에 있는 오브젝트도 손쉽게 고립된 테스트로 만들 수 있음
+- **DI를 이용한 트랜잭션 분리는 데코레이터 패턴과 프록시 패턴**으로 이해될 수 있음
+- 번거로운 **프록시 클래스 작성은 JDK의 다이나믹 프록시**를 사용하면 간단하게 만들 수 있음
+- 다이나믹 프록시는 스태틱 팩토리 메소드를 사용하기에 빈으로 등록하기 번거로움. 팩토리빈으로 만들기
+- 프록시 팩토리빈의 설정이 반복되는 문제를 해결하기 위해 자동 프록시 생성기와 포인트컷 활용
+
+```java
+class ex {
+    @Bean // 어드바이스와 포인트컷을 담을 어드바이저 등록
+    public DefaultPointcutAdvisor transactionAdvisor() {
+        DefaultPointcutAdvisor defaultPointcutAdvisor = new DefaultPointcutAdvisor();
+        defaultPointcutAdvisor.setAdvice(transactionAdvice());
+        defaultPointcutAdvisor.setPointcut(transactionPointcut());
+        return defaultPointcutAdvisor;
+    }
+
+    @Bean
+    public DefaultAdvisorAutoProxyCreator defaultAdvisorAutoProxyCreator() {
+        return new DefaultAdvisorAutoProxyCreator(); // 자동 프록시 생성 빈 후처리기
+    }
+}
+```
+
+- 포인트컷은 AspectJ 포인트컷 표현식 작성하면 편리
+- AOP를 이용해 트랜잭션 속성을 지정하는 방법에는 포인트컷 표현식, 메소드 이름패턴, @Transactional 애노테이션 방법이 있음. 
