@@ -3,11 +3,13 @@ package org.user.dao;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.user.domain.User;
+import org.user.sqlservice.SqlService;
 
 import javax.sql.DataSource;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 
 public class UserDaoJdbc implements UserDao {
     private RowMapper<User> userMapper =
@@ -31,16 +33,17 @@ public class UserDaoJdbc implements UserDao {
         this.jdbcTemplate = new JdbcTemplate(dataSource);
     }
 
-    public String sqlAdd;
-    public void setSqlAdd(String sqlAdd){
-        this.sqlAdd = sqlAdd;
+    private SqlService sqlService;
+
+    public void setSqlService(SqlService sqlService) {
+        this.sqlService = sqlService;
     }
 
     public void add(User user) {
 //        this.jdbcTemplate.update("insert into users(id, name, password, email, level, login, recommend) " +
 //                        "values(?,?,?,?,?,?)",
         this.jdbcTemplate.update(
-                this.sqlAdd,
+                this.sqlService.getSql("userAdd"),
                 user.getId(), user.getName(), user.getPassword(), user.getEmail(),
                 user.getLevel().intValue(),
                 user.getLogin(),
