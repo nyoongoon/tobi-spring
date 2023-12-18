@@ -172,3 +172,160 @@ public class SimpleSqlService implements SqlService {
 - -> 스키마 컴파일러를 통해 자동 생성된 오브젝트에는 매핑 정보가 애노테이션으로 담겨 있음
 - -> JAXB API는 애노테이션에 담긴 정보를 이용해서 XML과 매핑된 오브젝트 트리 사이의 자동변환 작업을 수행해줌. 
 ![](img/img_39.png)
+
+#### SQL 맵을 위한 스키마 작성과 컴파일 
+- SQL 정보는 키와 SQL의 목록으로 구성된 맵 구조로 만들면 편리함
+```xml
+<sqlmap>
+    <sql key="userAdd">insert into users(...) ...</sql>
+<!--    ... -->
+</sqlmap>
+```
+- xml 문서 구조를 정의하고 있는 xml 스키마
+```xml
+<element name="sqlmap">
+    <complexType>
+        <sequence>
+            <element name="sql" maxOccurs="unbounded" type="tns:sqlType" />
+        </sequence>
+    </complexType>
+    <complexType name="sqlType">
+        <simpleContent>
+            <extension base="string">
+                <attribute name="key" use="required" type="string" />
+            </extension>
+        </simpleContent>
+    </complexType>
+</element>
+```
+- -> 이렇게 만든 스키마 파일을 sqlmap.xsd라는 이름으로 프로젝트 루트에 저장하고 JAXB 컴파일러로 컴파일하기
+
+
+#### 언마샬링
+- XML문서를 읽어서 자바의 오브젝트로 변환하는 것을 JAXB에서 언마샬링이라고 부름
+- 반대로 오브젝트를 XML으로 변환하는 것은 마샬링 
+- -> 자바 오브젝트를 바이트 스트림으로 바꾸는 걸 직렬화라고 부르는 것과 비슷함.
+#### JAXB 테스트
+```xml
+<sqlmap>
+    <sql key="add">insert</sql>
+    <sql key="get">select</sql>
+    <sql key="delete">delete</sql>
+</sqlmap>
+```
+
+```java
+import org.junit.Test;
+
+import javax.xml.bind.JAXBContext;
+import java.io.IOException;
+
+public class JaxbTest {
+    @Test
+    public void readSqlmap() throws JAXBException, IOException {
+        String contextPath = Sqlmap.class.getPackage().getName();
+        JAXBContext context = JAXBContext.newInstance(contextPath);
+        Unmarshaller unmarshaller = context.createUnmarshaller();
+        Sqlmap sqlmap = (Sqlmap) unmarshaller.unmarshal(
+                getClass().getResourceAsStream("sqlmap.xml"));
+        List<SqlType> sqlList = sqlmap.getSql();
+        assertThat(sqlList.get(0).getKey(), is("add"));
+        assertThat(sqlList.get(0).getValue(), is("insert"));
+        assertThat(sqlList.get(1).getKey(), is("get"));
+        assertThat(sqlList.get(1).getValue(), is("select"));
+        assertThat(sqlList.get(2).getKey(), is("delete"));
+        assertThat(sqlList.get(3).getValue(), is("delete"));
+    }
+}
+```
+
+### XML 파일을 이용하는 SQL 서비스
+#### SQL 맵 XML 파일
+- SQL은 DAO의 로직 일부라고 볼 수 있으므로 DAO와 같은 패키지에 두는 게 좋음
+
+#### XML SQL 서비스
+- 특별한 이유가 없는 한 XML 파일은 한 번만 읽도록
+- -> XML 파일로부터 읽는 내용은 어딘가에 저장해두고 DAO에서 요청이 올 때 사용해야함.
+- -> 생성자에서 JAXB를 이용해 XML로 된 SQL 문서를 읽어들이고, 변환된 Sql 오브젝트를 맵으로 옮겨서 저장해뒀다가,
+- -> DAO요청에 따라 SQL을 찾아서 전달하는 방식으로 구현하기
+
+```java
+import org.user.sqlservice.SqlRetrievalFailureException;
+
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.JAXBException;
+
+public class XmlSqlService implements SqlService {
+    private Map<String, String> sqlMap = new HashMap<String, String>();
+
+    public XmlSqlService() {
+        String contextPath = Sqlmap.class.getPackage().getName();
+        try {
+            JAXBContext context = JAXBContext.newInstance(contextPath);
+            Unmarshaller unmarshaller = context.createUnmarshaller();
+            InputStream is = UserDao.class.getResourceAsStream("sqlmap.xml"); //UserDao와 같은 클래스 패스의 sqlmap.xml 파일을 변환하기
+            Sqlmap sqlmap = (Sqlmap) unmarshaller.unmarshal(is);
+            for (SqlType sql : sqlmap.getSql()) {
+                sqlMap.put(sql.getKey(), sql.getValue());
+            }
+        } catch (JAXBException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public String getSql(String key) throws SqlRetrievalFailureException{
+        String sql = sqlMap.get(key);
+        if(sql == null){
+            throw new SqlRetrievalFailureException(key + "를 이용해서 SQL을 찾을 수 없습니다.");
+        }else{
+            return sql;
+        }
+    }
+}
+```
+- sqlService 설정 변경
+```xml
+<bean id="sqlService" class="springbook.user.sqlservice.XmlSqlService">
+</bean> 
+```
+
+### 빈의 초기화 작업
+- XmlSqlService 몇가지 개선점
+- 생성자에서 예외 로직 다루는 것은 좋지 않음 
+- 파일의 위치와 이름이 코드에 고정되어 있는 것은 좋지 않음. -> 외부에서 DI 설정할 수 있게
+- 파일이름을 외부에서 지정할 수 있도록 프로퍼티 추가
+```java
+public class XmlSqlService implements SqlService {
+    //..
+    private String sqlmapFile;
+
+    public void setSqlmapFile(String sqlmapFile) {
+        this.sqlmapFile = sqlmapFile;
+    }
+
+    public void loadSql() {
+        String contextPath = Sqlmap.class.getPackage().getName();
+        try {
+            JAXBContext context = JAXBContext.newInstance(contextPath);
+            Unmarshaller unmarshaller = context.createUnmarshaller();
+            InputStream is = UserDao.class.getResourceAsStream(this.sqlmapFile); //UserDao와 같은 클래스 패스의 sqlmap.xml 파일을 변환하기
+            Sqlmap sqlmap = (Sqlmap) unmarshaller.unmarshal(is);
+            for (SqlType sql : sqlmap.getSql()) {
+                sqlMap.put(sql.getKey(), sql.getValue());
+            }
+        } catch (JAXBException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    //..
+}
+```
+- 외부에서 파일 지정, SQL 읽어들이는 초기화 담당 메소드 만들어주었음
+- sqlMapFile이라는 프로퍼티는 빈 설정의 \<property\> 태그를 이용해 지정
+#### 스프링 빈 후처리기 활용
+- 빈 후처리기는 스프링 컨테이너가 빈을 생성 한 뒤에 부가적인 작업 수행할 수 있음
+- AOP를 위한 프록시 자동 생성기가 대표적인 빈 후처리기
+- 그 중에서 애노테이션을 이용한 빈 설정을 지원해주는 몇가지 빈 후처리기가 있음
+- \<context:annotation-config\> 태그를 만들어 설정파일에 넣어주면 빈 설정 기능에 사용할 수 있는
+- -> 특별한 애노테이션 기능을 부여해주는 빈 후처리기들이 등록됨
+- 
