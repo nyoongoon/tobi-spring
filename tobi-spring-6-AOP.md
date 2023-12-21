@@ -1760,15 +1760,6 @@ class ex {
 //        proxyFactoryBean.setInterceptorNames("transactionAdvisor"); // 어드바이스와 어드바이저 동시 가능 설정. 리스트에 빈 아이디값 넣어줌.
 //        return proxyFactoryBean;
 //    }
-
-    //    public UserServiceImpl userServicImpl() {
-    @Bean
-    public UserServiceImpl userService() {
-        UserServiceImpl userServiceImpl = new UserServiceImpl();
-        userServiceImpl.setUserDao(userDao());
-        userServiceImpl.setMailSender(mailSender());
-        return userServiceImpl;
-    }
 }
 ```
 

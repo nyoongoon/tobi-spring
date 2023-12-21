@@ -470,10 +470,6 @@ public class XmlSqlService implements SqlService, SqlRegistry, SqlReader{
 - -> SqlService인터페이스에 선언된 메소드인 getFinder()를 sqlReader와 sqlRegistry를 이용하도록 변경하기
 
 ```java
-import org.user.sqlservice.SqlReader;
-import org.user.sqlservice.SqlRegistry;
-import org.user.sqlservice.SqlService;
-
 public class XmlSqlService implements SqlService, SqlRegistry, SqlReader{
     @PostConstruct
     public void loadSql(){
@@ -521,13 +517,13 @@ public class XmlSqlService implements SqlService, SqlRegistry, SqlReader{
 #### 자기참조 빈 설정
 - 같은 클래스 안에 구현된 내용이기는 하지만
 - SqlService의 메소드에서 Sql을 읽을 때는 SqlReader인터페이스를 통해
-- Sql를찾을 때는 SqlRegistry인터페이스를 통해 간접적으로 접근하게 했음
+- Sql를 찾을 때는 SqlRegistry인터페이스를 통해 간접적으로 접근하게 했음
 - 빈 설정을 통해 실제 DI가 일어나도록 하기 
 - 프로퍼티는 자기 자신을 참조할 수 있음. 수정자 메소드로 주입만 가능하면 됨
 ```xml
 <bean id="sqlService" class="springbook.user.sqlservice.XmlSqlService">
-    <property name="sqlReader" ref="sqlService" />
-    <property name="sqlRegistry" ref="sqlService" />
+    <property name="sqlReader" ref="sqlService" /> <!-- 자기자신 참조 -->
+    <property name="sqlRegistry" ref="sqlService" />  <!-- 자기자신 참조 -->
     <property name="sqlmapFile" value="sqlmap.xml" />
 </bean>
 ```
