@@ -291,7 +291,7 @@ public class XmlSqlService implements SqlService {
 
 ### 빈의 초기화 작업
 - XmlSqlService 몇가지 개선점
-- 생성자에서 예외 로직 다루는 것은 좋지 않음 
+- 생성자에서 예외 로직 다루는 것은 좋지 않음
 - 파일의 위치와 이름이 코드에 고정되어 있는 것은 좋지 않음. -> 외부에서 DI 설정할 수 있게
 - 파일이름을 외부에서 지정할 수 있도록 프로퍼티 추가
 ```java
@@ -328,4 +328,328 @@ public class XmlSqlService implements SqlService {
 - 그 중에서 애노테이션을 이용한 빈 설정을 지원해주는 몇가지 빈 후처리기가 있음
 - \<context:annotation-config\> 태그를 만들어 설정파일에 넣어주면 빈 설정 기능에 사용할 수 있는
 - -> 특별한 애노테이션 기능을 부여해주는 빈 후처리기들이 등록됨
+- -> @PostConstruct
+#### @PostConstruct
+- 스프링은 @PostConstruct 애노테이션을 빈 오브젝트의 초기화 메소드를 지정하는데 사용함
+- @PostConstruct를 초기화 작업을 수행할 메소드에 부여해주면
+- -> 스프링은 XmlSqlservice 클래스로 등록된 빈의 오브젝트를 생성하고 DI 작업을 마친 뒤
+- -> @PostConstruct가 붙은 메소드를 자동으로 실행해줌.
+- -> 생성자와는 달리 프로퍼티 까지 모드 준비된 후 실행됨
+
+```java
+import org.user.sqlservice.SqlService;
+
+public class XmlSqlService implements SqlService{
+    @PostConstruct
+    public void loadSql(){}
+}
+```
+- -> sqlmapFile 프로퍼티의 값을 sqlService 빈의 설정에 넣어주기
+- sqlmapFile 프로퍼티 값은 XML 파일의 클래스패스로, UserDao 인터페이스의 패키지로부터 상대적으로 지정 가능
+```xml
+<bean id="sqlService" class="springbook.user.sqlservice.XmlSqlService">
+    <property name="sqlmapFile" value="sqlmap.xml"/>
+</bean>
+```
+
+### 변화를 위한 준비 : 인터페이스 분리
+- 현재 XmlSqlService는 특정 포맷의 XML에서 SQL 데이터를 가져오고, 이를 HashMap 타입의 맵 오브젝트에 저장해둠
+- -> SQL을 가져오는 방법에 있어서 특정 기술에 고정되있음
+- -> XML 대신 다른 포맷의 파일에서 SQL을 읽어 오게 하려면?
+#### 책임에 따른 인터페이스 정의
+- 독립적으로 변경 가능한 책임 두가지
+- 1 SQL정보를 외부의 리소스로부터 읽어오는 것
+- 2 SQL을 보관해두고 있다가 필요할 때 제공해주는 것
+#### 구조
+- SqlService 구현 클래스가 변경 가능한 책임을 가진
+- SqlReader와 SqlRegistry 두가지 타입의 오브젝트를 사용하도록 만듬
+- SqlRegistry 는 SqlUpdater가 sql을 런타임시에 변경하도록 사용할 수도 있음
+- SqlReader에서 SqlRegistry로 전달하는 과정과 형식을 어떻게 할까?
+- -> 구현방식이 다양한 두개의 오브젝트 사이에서 복잡한 정보를 전덜하기 위해서는 어떻게?
+- -> 두 오브젝트 사이의 정보를 전달하는 것이 전부라면 SqlService가 중간 과정에서 아예 빠지는 방법을 생각해볼 수도 있음
+- SqlService가 SqlReader에게 SqlRegistry전략을 제공해주면서
+- -> 이를 이용해 SQL정보를 SqlRegistry에 저장하라고 요청하는 편이 나음
+```
+sqlReader.readSql(sqlRegistry); // SQL을 저장할 대상인 sqlRegistry 오브젝트를 전달
+```
+```java
+interface SqlRegistry{
+    void registerSql(String key, String sql);
+    String findSql(String key) throws SqlNotFoundException;
+}
+```
+- 이렇게 만들어두면 불필요하게 SqlService코드를 통해 특정 포맷으로 변환한 SQL정보를 주고 받ㅇ르 필요 없이
+- SqlReader가 직접 SqlRegistry에 SQL 정보를 등록할 수 있음
+- -> 이렇게 하면 SqlReader와 SqlRegistry는 각자의 구현 방식을 독립적으로 유지하면서 꼭 필요한 관계만 가지고 협력해서 일을 할 수 있는 구조가 됨
+- SqlReader가 사용할 SqlRegistry오브젝트를 제공해주는건 SqlService의 코드가 담당
+- SqlRegistry가 일종의 콜백 오브젝트처럼 사용됨
+
+### 자기참조 빈으로 시작하기
+- SqlService의 구현 클래스는 이제 SqlReader와 SqlRegistry 두 개의 프로퍼티를 DI 받을 수 있는 구조로 변경
+- XmlSqlService 클래스 하나가 SqlService, SqlReader, SqlRegistry라는 세개의 인터페이스를 구현
+- -> 같은 클래스의 코드이지만 책임이 다른 코드는 직접 접근하지 않고 인터페이스를 통해 간접적으로 사용하는 코드로 변경하기
+#### 인터페이스를 이용한 분리
+- 일단 XmlSqlService는 SqlService만을 구현한 독립적인 클래스라고 생각하기.
+- -> SqlReader와 SqlRegistry 두 개의 인터페이스 타입 오브젝트에 의존하는 구조로 만들기
+- DI 를 통해 이 두개의 인터페이스를 구현한 오브젝트 주입 받기
+```java
+public class XmlSqlService implements SqlService {
+    private SqlReader sqlReader;
+    private SqlRegistry sqlRegistry;
+
+    public void setSqlReader(SqlReader sqlReader) {
+        this.sqlReader = sqlReader;
+    }
+
+    public void setSqlRegistry(SqlRegistry sqlRegistry) {
+        this.sqlRegistry = sqlRegistry;
+    }
+    //..
+}
+```
+- 다음은 XmlSqlService가 Sqlregistry를 구현하도록 만들기
+
+```java
+import org.user.sqlservice.SqlRegistry;
+import org.user.sqlservice.SqlService;
+
+public class XmlSqlService implements SqlService, SqlRegistry {
+    //..
+    //SqlRegistry 구현 부분
+    //sqlMap은 sqlRegistry구현의 일부가 되므로 외부에서 직접 접근 불가
+    private Map<String, String> sqlMap = new HashMap<String, String>();
+
+    public String findSql(String key) throws SqlNotFoundException {
+        String sql = sqlMap.get(key);
+        if (sql == null) throw new SqlNotFoundException(key +
+                "에 대한 SQL을 찾을 수 없습니다.");
+        else return sql;
+    }
+    public void registerSql(String key, String sql) {
+        sqlMap.put(key, sql);
+    }
+    //..
+}
+```
+- XmlSqlService 클래스가 SqlReader를 구현하도록 만들기
+- -> xml파일을 어떻게 읽어오는지 SqlReader의 메소드 뒤로 숨기고
+- -> 어떻게 저장해줄지 SqlRegistry타입 오브젝트가 알아서 처리하도록 수정하기
+- SqlReader를 구현한 코드에서 XmlSqlService내의 다른 변수와 메소드를 직접 참조하거나 사용하면 안됨
+- -> 필요한 경우만 적절한 인터페이스를 통해 접₩
+
+```java
+public class XmlSqlService implements SqlService, SqlRegistry, SqlReader{
+
+    //sqlMapFile은 SqlReader구현의 일부가 되므로 SqlReader구현 메소드를 통하지 않고 접근하면 안됨
+    private String sqlmapFile;
+    public void setSqlmapFile(String sqlmapFile) {
+        this.sqlmapFile = sqlmapFile;
+    }
+    // loadSql()에 있던 코드를 SqlReader 메소드로 가져옴 
+    // 초기화를 위해 무엇을 할 것인가와 SQL을 어떻게 읽는지를 분리
+    public void read(SqlRegistry sqlRegistry){
+        String contextPath = Sqlmap.class.getPackage().getName();
+        try{
+            JAXBContext context = JAXBContext.newInstance(contextPath);
+            Unmarshaller unmarshaller = context.createUnmarshaller();
+            InputStream is = UserDao.class.getResourceAsStream(sqlmapFile);
+            Sqlmap sqlmap = (Sqlmap)unmarshaller.unmarshal(is);
+            for(SqlType sql : sqlmap.getSql()){
+                //파라미터로 전달받은 구현코드는 사실 자기 자신이긴하지만
+                //다른 오브젝트라고 생각하고 인터페이스에 정의된 메소드를 통해서만 사용해야함.
+                sqlRegistry.registerSql(sql.getKey(), sql.getValue());
+            }
+        }catch (JAXBException e){
+            throw new RuntimeException(e);
+        }
+    }
+}
+```
+- 마지막으로 SqlServcie 인터페이스 구현을 마무리
+- -> @PostConstruct가 달린 빈초기화 메소드와 
+- -> SqlService인터페이스에 선언된 메소드인 getFinder()를 sqlReader와 sqlRegistry를 이용하도록 변경하기
+
+```java
+import org.user.sqlservice.SqlReader;
+import org.user.sqlservice.SqlRegistry;
+import org.user.sqlservice.SqlService;
+
+public class XmlSqlService implements SqlService, SqlRegistry, SqlReader{
+    @PostConstruct
+    public void loadSql(){
+        this.sqlReader.read(this.sqlRegistry);
+    }
+    public String getSql(String key) throws SqlRetrievalFailureException{
+        try{
+            return this.sqlRegistry.findSql(key);
+        }catch (SqlNotFoundException e){
+            throw new SqlRetrievalFailureException(e);
+        }
+    }
+
+//    @PostConstruct
+//    public void loadSql(){
+//        String contextPath = Sqlmap.class.getPackage().getName();
+//        try {
+//            JAXBContext context = JAXBContext.newInstance(contextPath);
+//            Unmarshaller unmarshaller = context.createUnmarshaller();
+//            InputStream is = UserDao.class.getResourceAsStream(this.sqlmapFile); //UserDao와 같은 클래스 패스의 sqlmap.xml 파일을 변환하기
+//            Sqlmap sqlmap = (Sqlmap) unmarshaller.unmarshal(is);
+//            for (SqlType sql : sqlmap.getSql()) {
+//                sqlMap.put(sql.getKey(), sql.getValue());
+//            }
+//        } catch (JAXBException e) {
+//            throw new RuntimeException(e);
+//        }
+//    }
+
+//    public String getSql(String key) throws SqlRetrievalFailureException {
+//        String sql = sqlMap.get(key);
+//        if (sql == null) {
+//            throw new SqlRetrievalFailureException(key + "를 이용해서 SQL을 찾을 수 없습니다.");
+//        } else {
+//            return sql;
+//        }
+//    }
+}
+```
+- loadSql()은 XmlSqlService 구현 방법에 따른 메소드
+- getSql()은 SqlService 인터페이스의 메소드
+- loadSql() 초기화 메소드에서 sqlReader에게 sqlRegisry를 전달하면서 SQL을 읽어서 저장해두도록 요청
+- 빈의 초기화를 담당하는 메소드인 loadSql()로 초기화 작업 때 이런 일을 한다는걸 보여주는 코드만 있으면 됨
+
+#### 자기참조 빈 설정
+- 같은 클래스 안에 구현된 내용이기는 하지만
+- SqlService의 메소드에서 Sql을 읽을 때는 SqlReader인터페이스를 통해
+- Sql를찾을 때는 SqlRegistry인터페이스를 통해 간접적으로 접근하게 했음
+- 빈 설정을 통해 실제 DI가 일어나도록 하기 
+- 프로퍼티는 자기 자신을 참조할 수 있음. 수정자 메소드로 주입만 가능하면 됨
+```xml
+<bean id="sqlService" class="springbook.user.sqlservice.XmlSqlService">
+    <property name="sqlReader" ref="sqlService" />
+    <property name="sqlRegistry" ref="sqlService" />
+    <property name="sqlmapFile" value="sqlmap.xml" />
+</bean>
+```
+- -> 자기참조빈은 책임과 관심사가 복잡하게 얽혀있어서 확장이 힘들고 변경에 취약한 구조의 클래스를 
+- -> 유연한 구조로 만들려고 할 때 처음 시도해볼 수 있는 방법임
+
+### 디폴트 의존관계
+- 확장가능한 인터페이스를 정의하고 그에 따라 메소드를 구분해서 DI가능하도록 코드 재구성함
+- 다음은 이를 완전히 분리해두고 DI로 조합해서 사용하게 만드는 단계
+#### 확장 가능한 기반 클래스
+```java
+public class BaseSqlService implements SqlService{
+    // BaseSqlService는 상속을 통해 확장해서 사용하기에 적합함
+    // 서브클래스 필요한경우 접근할 수 있도록 protected로 선언
+    protected SqlReader sqlReader;
+    private SqlRegistry sqlRegistry;
+
+    public void setSqlReader(SqlReader sqlReader) {
+        this.sqlReader = sqlReader;
+    }
+
+    public void setSqlRegistry(SqlRegistry sqlRegistry) {
+        this.sqlRegistry = sqlRegistry;
+    }
+    
+    @PostConstruct
+    public void loadSql(){
+        this.sqlReader.read(this.sqlRegistry);
+    }
+
+    @Override
+    public String getSql(String key) throws SqlRetrievalFailureException {
+        return null;
+    }
+}
+```
+- SQL을 저장해두고 찾아주는 기능을 담당했던 코드를 SqlRegistry를 구현하는 독립클래스로 분리
+```java
+public class HashMapSqlRegistry implements SqlRegistry {
+    private Map<String, String> sqlMap = new HashMap<>();
+
+    @Override
+    public String findSql(String key) throws SqlNotFoundException {
+        String sql = sqlMap.get(key);
+        if (sql == null) {
+            throw new SqlNotFoundException(key + "를 이용해서 SQL을 찾을 수 없습니다");
+        } else {
+            return sql;
+        }
+    }
+
+    @Override
+    public void registerSql(String key, String sql) {
+        sqlMap.put(key, sql);
+    }
+}
+```
+- JAXB를 이용해 XML 파일에서 SQL 정보를 읽어오는 코드를 SqlReader인터페이스의 구현클래스로 독립
+- 의존관계 독립적인 빈 설정
+```xml
+<beans>
+    <bean id="sqlService" class="springbook.user.sqlservice.BaseSqlService">
+        <property name="sqlReader" ref="sqlReader" />
+        <property name="sqlRegistry" ref="sqlRegistry" />
+    </bean>
+    <bean id="sqlReader" class="springbook.user.sqlservice.JaxbXmlSqlReader">
+        <property name="sqlmapFile" value="sqlmap.xml" />
+    </bean>
+    <bean id="sqlRegistry" class="springbook.user.sqlservice.HashMapSqlRegistry">
+    </bean>
+</beans>
+```
+
+#### 디폴트 의존관계 갖는 빈 만들기 
+- 특정 의존 오브젝트가 대분의 환경에서 거의 디폴트라고 해도 좋을만큼
+- 기본적으로 사용될 가능성이 있다면, 디폴트 의존관계를 갖는 빈을 만드는 것을 고려해볼 필요가 있음
+- **디폴트 의존관계란 외부에서 DI 받지 않는 경우 기본적으로 자동 적용되는 의존관계**를 말함
+
+```java
+public class DefaultSqlService extends BaseSqlService {
+    public DefaultSqlService() {
+        // 생성자에서 디폴트 의존 오브젝트를 직접 만들어서 스스로 DI해줌
+        setSqlReader(new JaxbXmlSqlReader());
+        setSqlRegistry(new HashMapSqlRegistry());
+    }
+}
+```
+- DI설정이 없을 경우 디폴트로 적용하고 싶은 의존 오브젝트를 생성자에서 넣어줌
+- DI란 클라이언트 외부에서 의존 오브젝트를 주입해주는 것이지만
+- 이렇게 자신이 사용할 디폴트 의존 오브젝트를 스스로 DI하는 방법도 있음
+- 코드를 통해 의존관계의 오브젝트를주입해주면 특별히 DI가 필요한 상황이 아닌경우 편리하게 사용 가
+```xml
+<bean id="sqlService" class="springbook.user.sqlservice.DefaultSqlService" />
+```
+- -> 그러나 테스트 실패
+- -> DefaultSqlService 내부에서 생성하는 JaxbXmlSqlReader의 sqlmapFile 프로퍼티가 비어 있기 떄문
+- -> sqlmapFile이 없으면 SQL을 읽어올 대상을 알 수 없으므로 예외가 발생함
+- JaxbXmlSqlReader를 디폴트 의존 오브젝트로 직접 넣어줄 때는 프로퍼티를 외부에서 직접 지정할 수가 없음
+- -> sqlmapFile을 DefaultSqlService의 프로퍼티로 정의하는 방법 있지만 좋은 방법 아님
+- -> sqlmapFile의 경우도 JaxbXmlsSqlReader에 의해 기본적으로 사용될 만한 디폴트값을 가질 수 있지 않을까?
+- 디폴트 값을 갖는 JaxbXmlSqlReader
+```java
+public class JaxbXmlSqlReader implements SqlReader {
+    //    private String sqlmapFile;
+    private static final String DEFAULT_SQLMAP_FILE = "sqlmap.xml";
+    private String sqlmapFile = DEFAULT_SQLMAP_FILE;
+
+    public void setSqlmapFile(String sqlmapFile) {
+        this.sqlmapFile = sqlmapFile;
+    }
+}
+```
+- -> DI를 사용한다고 해서 항상 모든 프로퍼티 값을 설정에 넣고 모든 의존 오브젝트를 빈으로 일일이 지정할 필요는 없음
+- -> BaseSqlService와 같이 의존 오브젝틀를 DI 해줌으로써 기능의 일부를 자유롭게 확장할 수 있는 기반을 만들어야하지만,
+- -> DefaultSqlService처럼 자주 사용되는 의존 오브젝트는 미리 지정한 디폴트 의존 오브젝트를 설정 없이도 사용할 수 있게 만드는 것도 좋은 방법
+- DefaultSqlService는 SqlService를 바로 구현한 것이 아니라 BaseSqlService를 상속했다는 점이 중요함
+- DefaultSqlService는 BaseSqlService의 sqlReader와 sqlRegistry 프로퍼티를 그대로 갖고 있있고 다른 구현 오브젝트를 빈설정으로 등록 가능
+```xml
+<bean id="sqlService" class="springbook.user.sqlservice.DefaultSqlService">
+    <property name="sqlRegistry" ref="ultraSuperFastSqlRegistry"/>
+</bean>
+```
+
+### 서비스 추상화 적용
 - 
