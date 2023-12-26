@@ -647,5 +647,90 @@ public class JaxbXmlSqlReader implements SqlReader {
 </bean>
 ```
 
-### 서비스 추상화 적용
-- 
+## 서비스 추상화 적용
+- JaxbXmlSqlReader 개선하기
+- 1 JAXB 외 다양한 xml과 자바 오브젝트 매핑 기술로 손쉽게 바꿔서 사용할 수 있어야함
+- 2 XML파일을 좀 더 다양한 소스에서 가져올 수 있게 만들기
+
+### OXM 서비스 추상화
+- 스프링이 제공하는 OXM 추상화 서비스 인터페이스에는 자바 오브젝트를 XML로 변환하는 Marshaller와 반대로 XML을 자바 오브젝트로 변환하는 Unmarshaller가 있음
+
+```java
+package org.springframework.oxm;
+
+import javax.xml.transform.Source;
+import java.io.IOException;
+
+public interface Unmarshaller {
+    boolean supports(Class<?> clazz);
+
+    Object unmarshal(Source source) throws IOException, XmlMappingException;
+}
+```
+- JAXB 언마살러 등록한 빈설정
+```xml
+<bean id="unmarshaller" class="org.springframework.oxm.jaxb.Jaxb2Marshaller">
+    <property name="contextPath" value="springbook.user.sqlservice.jaxb"/>
+</bean>
+```
+- Castor에서 사용할 매필 정보 담을 xml 따로 생성하기
+- unmarshaller 빈의 클래스를 Castor용 구현 클래스로 변경하기 -> mappingLocation 프로퍼티에 준비된 Caster용 매핑 파일의 위치를 지정해주기
+```xml
+<bean id="unmarshaller"
+    class="org.springframework.oxm.caster.CastorMarshaller">
+    <property name="mappingLocation"
+              value="springbook/learningtest/spring/oxm/mapping.xml"/>
+</bean>
+```
+
+### OXM 서비스 추상화 적용 
+- 스프링의 OXM 추상화 기능을 이용하는 SqlService 만들기
+- OxmSqlService라고 하고 SqlRegistry는 DI 받을 수 있게 하지만 SqlReader는 스프링 OXM언마샬러를 이용하도록 OxmSqlService내 고정하기
+- -> SQL을 읽는 방식을 OXM으로 제한해서 사용성을 극대화하는게 목적
+- -> SQL을 가져오는 방법이 스프링의 OXM 추상화 방식으로 고정된다면 OxmSqlService 클래스 내에 OXM 코드를 넣어도 될까?
+- -> 그럴 수 있지만 OxmSqlService가 OXM 기술에 의존적이라고 꼭 OXM 코드를 직접 갖고 있을 필요는 없음
+- -> 이미 SqlReader와 SqlRegistry라는 두 개의 전략을 활용하는 구조를 적용해봤으므로
+- -> 이를 유지하되 SqlReader 구현 오브젝트에 대한 의존관계를 고정시켜버리는 방법을 생각해볼 수 있음. 
+- -> 구현 클래스를 OxmSqlService가 내장하게 만들기..
+
+#### 멤버 클래스를 참조하는 통합 클래스
+- OxmSqlService는 BaseSqlService와 유사하게 SqlReader 타입의 의존 오브젝트를 사용하되
+- -> 이를 **스태틱 멤버 클래스로 내장하고 자신만이 사용**할 수 있도록 만들기. 
+- --> **의존 오브젝트를 자신만이 사용하도록 독점하는 구조**로 만드는 방법
+- -> 내장된 SqlReader 구현을 외부에서 사용하지 못하도록 제한하고 스스로 최적화된 구조로 만들어두기
+- -> **밖에서 볼 땐 하나의 오브젝트로 보이지만 내부에서는 의존관계를 가진 두개의 오브젝트가 깔끔하게 결합**되서 사용됨
+- -> 유연성을 조금 손해보더라도 내부적으로 낮은 결합도를 유지한 채로 응집도가 높은 구현 만들 때 유용
+![](img/img_40.png)
+- -> SqlRader를 SqlService 클래스 안에 포함시켜만들기 -> 하나의 빈으로 등록 
+- 언마샬러 빈은 스프링이 제공해주니 구현필요x
+- SqlRegistry는 일단 가장 단순한 HashMapSqlRegistry를 디폴트 의존 오브젝트로 등록 -> 필요하면 DI로 교체
+- OxmSqlService와 OxmSqlReader는 **구조적으로 강하게 결합되어 있지만 논리적으로 명확하게 분리되는 구조**
+- -> **자바의 스태틱 멤버 클래스를 이런 용도로 쓰기 적합**함.
+
+```java
+import org.user.sqlservice.SqlReader;
+
+public class OxmSqlService implements SqlService {
+    //final이므로 변경 불가능. -> OxmSqlService와 OxmSqlReader는 강하게 결합되서 하나의 빈으로 등록되고 한 번에 설정 할 수 있음
+    private final OxmSqlReader oxmSqlReader = new OxmSqlReader();
+
+    private class OxmSqlReader implements SqlReader{ //private 멤버 클래스로 정의. 톱레벡 클래스인 OxmSqlService만 사용가능함.
+        //..
+    }
+    //..
+}
+```
+- OxmSqlReader는 private 멤버 클래스이므로 외부에서 접근하거나 사용할 수 없음
+- 또한 OxmSqlService는 이를 final로 선언하고 직접 오브젝트를 생성하기 때문에 OxmSqlReader를 DI하거나 변경할 수 없음
+- -> 이렇게 두 개의 클래스를 강하게 결합하고 더 이상의 확장이나 변경을 제한해두는 이유는 무엇?
+- -> OXM을 이용하는 서비스 구조로 최적화하기 위해서 -> 하나의 클래스로 만들어두기 때문에 빈의 등록과 설정은 단순해지고 쉽게 사용가능.
+- -> 디폴트 의존 오브젝트 방식은 디폴트 오브젝트 내부에서 값은 주입받기가 힘들다는 점이 문제
+- -> OXM을 적용하는 경우는 언마샬러를 비롯해서 DI 설정해줄게 많아지기 때문에 SqlReader 클래스를 단순 디폴트 오브젝트 방식으로 제공할 수 없음 
+- -> 이런 경우에는 하나의 빈 설정만으로 SqlService와 SqlReader의 필요한 프로퍼티 설정을 모두 가능하도록 만들 필요가 있음
+- --> SqlService의 구현이 SqlReader의 구체적인 구현 클래스가 무엇인지도 알고, 자신의 프로퍼티를 통해 필요한 설정정보도 넘겨주고, 심지어 멤버 클래스로 소유도 하고 있는 강한 결합 구조를 만드는 방법을 사용하는 것임
+ 
+![](img/img_41.png)
+- 위는 하나의 빈 설정으로  두개의 오브젝트를 설정하는 구조를 보여줌
+- -> OxmSqlService로 등록한 빈의 프로퍼티 일부는 OxmSqlService 내부의 OxmSqlReader 프로퍼티를 설정해주기 위한 창구역할을 함.
+- OxmSqlReader는 외부에 노출되지 않기 때문에 OxmSqlService에 의해서만 만들어지고 스스로 빈으로 등록될 수 없음
+- -> 자신이 DI통해 제공받아야하는 프로퍼티가 있으면 이를 OxmSqlService의 공개된 프로퍼티를 통해 간접적으로 DI 받아야함!
