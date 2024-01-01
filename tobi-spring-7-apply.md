@@ -734,3 +734,134 @@ public class OxmSqlService implements SqlService {
 - -> OxmSqlService로 등록한 빈의 프로퍼티 일부는 OxmSqlService 내부의 OxmSqlReader 프로퍼티를 설정해주기 위한 창구역할을 함.
 - OxmSqlReader는 외부에 노출되지 않기 때문에 OxmSqlService에 의해서만 만들어지고 스스로 빈으로 등록될 수 없음
 - -> 자신이 DI통해 제공받아야하는 프로퍼티가 있으면 이를 OxmSqlService의 공개된 프로퍼티를 통해 간접적으로 DI 받아야함!
+```java
+public class OxmSqlService implements SqlService {
+    //final이므로 변경 불가능. -> OxmSqlService와 OxmSqlReader는 강하게 결합되서 하나의 빈으로 등록되고 한 번에 설정 할 수 있음
+    private final OxmSqlReader oxmSqlReader = new OxmSqReader();
+    //..
+    public void setUnmarshaller(Unmarshaller unmarshaller) {
+        this.oxmSqlReader.setUnmarshaller(unmarshaller);
+    }
+
+    public void setSqlmapFile(String sqlmapFile) {
+        this.oxmSqlReader.setSqlmapFile(sqlmapFile);
+    }
+    //private 멤버 클래스로 정의. 톱레벡 클래스인 OxmSqlService만 사용가능함.
+    private class OxmSqlReader implements SqlReader {
+        private Unmarshaller unmarshaller;
+        private String sqlmapFile;
+        //setter 메소드 생략
+    }
+    //..
+}
+```
+- 위의 방식은 UserDaoJdbc안에서 JdbcTemplate을 직접 만들어서 사용한 것과 비슷
+- -> UserDaoJdbc는 스스로 DataSource 프로퍼티가 필요하지 않지만, 자신의 프로퍼티로 DataSource 등록해두고,
+- -> 이를 DI 받아서 JdbcTemplate을 생성하면서 전달해줌
+```
+public void setDataSource(DataSource dataSource) {
+    this.jdbcTemplate = new JdbcTemplate(dataSource);
+}
+```
+- 차이점 : JdbcTemplate은 그 자체로 독립된 빈으로 만들수도 있고, 여러 DAO 사용가능
+- -> OxmSqlReader는 OxmSqlService에서만 사용하도록 제한한 멤버 클래스라는 점에서 차이가 있음
+```java
+public class OxmSqlService implements SqlService {
+    //final이므로 변경 불가능. -> OxmSqlService와 OxmSqlReader는 강하게 결합되서 하나의 빈으로 등록되고 한 번에 설정 할 수 있음
+    private final OxmSqlReader oxmSqlReader = new OxmSqReader();
+
+    private SqlRegistry registry = new HashMapSqlRegistry();
+
+    public void setSqlRegistry(SqlRegistry sqlRegistry) {
+        this.sqlRegistry = sqlRegistry;
+    }
+
+    public void setUnmarshaller(Unmarshaller unmarshaller) {
+        this.oxmSqlReader.setUnmarshaller(unmarshaller);
+    }
+
+    public void setSqlmapFile(String sqlmapFile) {
+        this.oxmSqlReader.setSqlmapFile(sqlmapFile);
+    }
+
+    @PostConstruct
+    public void loadSql() {
+        this.oxmSqlReader.read(this.sqlRegistry);
+    }
+
+    public String getSql(String key) throws SqlRetrievalFailureException {
+        try {
+            return this.sqlRegistry.findSql(key);
+        } catch (SqlNotFoundException e) {
+            throw new SqlRetrievalFailureException(e);
+        }
+    }
+
+
+    //private 멤버 클래스로 정의. 톱레벡 클래스인 OxmSqlService만 사용가능함.
+    private class OxmSqlReader implements SqlReader {
+        private Unmarshaller unmarshaller;
+        private final static String DEFAULT_SQLMAP_FILE = "sqlmap.xml";
+        private String sqlmapFile = DEFAULT_SQLMAP_FILE;
+
+        public void setUnmarshaller(Unmarshaller unmarshaller) {
+            this.unmarshaller = unmarshaller;
+        }
+
+        public void setSqlmapFile(String sqlmapFile) { //디폴트 사용하지 않을 경우 사용
+            this.sqlmapFile = sqlmapFile;
+        }
+
+        public void read(SqlRegistry sqlRegistry) {
+            try {
+                Source source = new StreamSource(
+                        UserDao.class.getResourceAsStream(this.sqlmapFile));
+                Sqlmap sqlmap = (Sqlmap) this.unmarshaller.unmarshal(source);
+                for(SqlType sql : sql.getSql()){
+                    sqlRegistry.registerSql(sql.getKey(), sql.getValue());
+                }
+            } catch (IOException e) {
+                throw new IllegalArgumentException(this.sqlmapFile + "을 가져올 수 없습니다.", e);
+            }
+        }
+    }
+}
+```
+```xml
+<beans>
+    <bean id="sqlService" class="springbook.user.sqlservice.OxmSqlService">
+        <property name="unmarshaller" ref="unmarshaller" />
+    </bean>
+    <bean id="unmarshaller" class="org.springframework.oxm.jaxb.Jaxb2Marshaller">
+        <property name="contextPath" value="springbook.user.sqlservice.jaxb"/>
+    </bean>
+</beans>
+```
+
+#### 위임을 이용한 BaseSqlService의 재사용
+- 위의 OxmSqlService는 SqlReader는 스태틱 멤버 클래스로 고정시켜서 OXM에 특화된 형태로 재구성했기 때문에 
+- -> 설정은 간결해지고 의도되지 않는 방식으로 확장될 위험이 없ㅇ므
+- 꺼림칙한 부분 : loadSql()과 sqlSql()이라는 SqlService의 핵심 메소드 구현 코드가 BaseSqlService와 동일하다는 점
+- -> 프로퍼티 설정을 통한 초기화 작업을 제외하면 두 가지 작업의 코드는 BaseSqlService와 OxmSqlService 양쪽에 중복됨
+- -> BaseSqlService 코드를 재사용한다고 이를 상속해서 OxmSqlService를 만들면 멤버 클래스로 통합시킨
+- -> OxmSqlReader를 생성하는 코드를 넣기가 애매함
+- -> 중복을 제거하기 위해 loadSql()과 getSql() 메소드를 추출해서 슈퍼클래스로 분리할 수도 있겠으나 이정도 코드로 복잡한 계층구조 만들기 부담스러움
+- -> 이런 경우는 간단한 코드 중복쯤은 허용하고 BaseSqlService와 독립적으로 OxmSqlService를 관리해나가도 문제는 없을 것..
+- 그런데 loadSql()과 getSql()의 작업이 복잡한 경우는? 코드 양이 많고 변경도 자주 일어난다면? 
+- -> 중복된 코드를 제거할 방법 -> **위임 구조를 이용해 코드의 중복을 제거**
+- -> loadSql()과 getSql()의 구현 로직은 BaseSqlService에만 두고, 
+- -> **OxmSqlService는 일종의 설정과 기본 구성을 변경해주기 위한 어댑터 같은 개념**으로 BaseSqlService 앞에 두는 설계가 가능함
+- -> OxmSqlService의 외형적인 틀은 유지한채로 SqlService 기능 구현은 BaseSqlService로 위임하는 것.
+#### 위임 구조
+- 프록시 만들 때 위임구조 사용해 봄
+- 위임을 위해서는 두개의 빈을 등록하고 **요청을 직접 받는 빈이 중요 내용을 뒤의 빈에 전달해주는 구조**로 만들어야함
+- -> 하지만 OxmSqlService와 BaseSqlService를 위임 구조로 만들기 위해 두 개의 빈으로 등록하는 것은 불편한 일임.
+- -> 부가기능 프록시처럼 많은 타깃에 적용할 것도 아니고 ,특화된 서비스를 위해 한 번만 사용할 것이므로 유연한 DI는 포기
+- -> OxmSqlService와 BaseSqlService를 한 클래스로 묶는 방법을 생각해보기
+![](img/img_42.png)
+- -> 의존관계가 복잡해보일 수 있지만 OxmSqlService 자체는 OXM에 최적화된 빈 클래스를 만들기 위한 틀이라고 생각하면 이해하기 쉬움
+- OxmSqlService는 OXM 기술에 특화된 SqlReader를 멤버로 내장하고 있고, 그에 필요한 설정을 한 번에 지정할 수 있는 확장구조만을 갖고 있음.
+- 실제 SqlReader아 SqlService를 이용해 SqlService의 기능을 구현하는 일은 내부에 BaseSqlService를 만들어서 위임하기.
+```java
+
+```
