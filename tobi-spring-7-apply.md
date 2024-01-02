@@ -863,5 +863,119 @@ public class OxmSqlService implements SqlService {
 - OxmSqlService는 OXM 기술에 특화된 SqlReader를 멤버로 내장하고 있고, 그에 필요한 설정을 한 번에 지정할 수 있는 확장구조만을 갖고 있음.
 - 실제 SqlReader아 SqlService를 이용해 SqlService의 기능을 구현하는 일은 내부에 BaseSqlService를 만들어서 위임하기.
 ```java
-
+public class OxmSqlService implements SqlService {
+    // SqlService의 실제 구현 위임할 대상인 BaseSqlService를 인스턴스 변수로 정의
+    private final BaseSqlService baseSqlService = new BaseSqlService();
+    //..
+    @PostConstruct
+    public void loadSql(){
+        // OxmSqlService의 프로퍼티를 통해서 초기화된 SqlReader와 SqlRegistry를 실제 작업을 위임할 대상인 baseSqlService에 주입
+        this.baseSqlService.setSqlReader(this.oxmSqlReader);
+        this.baseSqlService.setSqlRegistry(this.sqlRegistry);
+        this.baseSqlService.loadSql(); //SQL을 등록하는 초기화 작업을 baseSqlService에 위임
+    }
+    public String getSql(String key) throws SqlRetrievalFailureException{
+        return this.baseSqlService.getSql(key);
+    }
+    //..
+}
 ```
+- 위임 구조를 이용하여 OxmSqlService에 있던 중복 코드를 제거
+
+
+### 리소스 추상화 
+- 지금까지 만든 OxmSqlReader나 XmlSqlReader에는 공통적인 문제점
+- -> SQL 매핑 정보가 담긴 XML 파일 이름을 프로퍼티로 외부에서 지정할 수 있지만 UserDao클래스와 같은 클래스패스에 존재하는 파일로 제한됨
+- 기존 OxmSqlReader는 클래스패스로부터 리소스 가져오기 위해 ClassLoader 클래스의 getResourceAsStream()을 사용함. 
+- -> 파일 시스템이나 웹상의 http를 통해 접근 가능한 파일로 바꾸려면 url클래스를 사용하도록 코드를 변경해야함
+- -> 또한 서블릿 컨텍스트 내의 리소스를 가져오려면 ServletContext의 getResrouceAsStream()을 사용해야함. 
+- -> 사실 리소스를 가져오면 최종적으로 InputStream 형태로 변환해서 사용해야겠지만, 리소스의 위치와 종류에 따라서 다른 클래스와 메소드를 사용해야한다는 점이 불편함.
+- -> 이것도 목적은 동일하지만 사용법이 각기 다른 여러 기술이 존재하는 것으로 생각할 수 있음
+- -> 여러가지 종류의 리소스를 어떻게 단일 인터페이스와 메소드로 추상화할지 고민.
+
+#### 리소스
+- 스프링은 자바에 존재하는 일관성 없는 리소스 접근 API를 추상화해서 Resource라는 추상화 인터페이스를 정의함.
+
+```java
+package org.springframework.core.io;
+
+import java.io.IOException;
+
+public interface Resource extends InputStreamSource {
+    // 리소스의 존재나 읽기 가능 여부를 확인할 수 있음. 현재 리소스에 대한 입력 스트림이 열려있는지도 확인 가능
+    boolean exists();
+    booean isReadable();
+    boolean isOpen();
+
+    // JDK의 URL, URI, File 형태로 전한 가능한 리소스에 사용됨. 
+    URL getURL() throws IOException;
+    URI getURI() throws IOException;
+    File getFile() throws IOException;
+    Resource createRelative(String relatvicePath) throws IOException;
+
+    // 리소스에 대한 이름과 부가적인 정보를 제공함.
+    long lastModified() throws IOException;
+    String getFilename();
+    String getDescription();
+}
+
+public interface InputStreamSource { // 모든 리소스는 InputStream 형태로 가져올 수 있음.
+    InputStream getInputStream() throws IOException;
+}
+```
+- 애플리케이션 컨텍스트가 사용할 설정 정보 파일을 지정하는 것부터 시작해서
+- **스프링의 거의 모든 API는 외부의 리소스 정보가 필요할 때 항상 이 Resource 추상화를 이용**함.
+- -> 어떻게 임의의 리소스를 Resource 인터페이스 타입의 오브젝트로 가져올 수 있을까? 
+- -> 다른 서비스 추상화 오브젝트와 달리, **Resource는 스프링에서 빈이 아니라 값으로 취급**
+- -> 리소스는 OXM이나 트랜잭션처럼 서비스를 제공해주는 것이 아니라, 단순한 정보를 가진 값으로 지정됨.
+- --> 빈으로 등록한다면 리소스 타입에 따라 각기 다른 Resource 인터페이스 구현 했겠지만,
+- --> 빈으로 등록하지 않으니 기껏해서 property의 value 애트리뷰트에 넣는 방법 밖에 없음 -> **단순 문자열**만 넣을 수 있음..
+
+#### 리소스 로더
+- 스프링에는 URL 클래스와 유사하게 **접두어를 이용해 Resource 오브젝트를 선언하는 방법**이 있음
+- -> 문자열 안에 리소스의 종류와 리소스의 위치를 함께 표현하게 해주는 것.
+- -> 이렇게 **문자열로 정의된 리소스를 실제 Resource 타입오브젝트로 변환해주는 ResourceLoader를 제공**함. 
+- -> ResourceLoader도 구현 다양할 수 있으므로 아래와 같은 인터페이스를 스프링이 정의해둠
+```java
+package org.springframework.core.io;
+
+public interface ResourceLoader {
+    Resource getResource(String location); // location에 담긴 스트링 정보를 바탕으로 그에 적절한 Resource로 변환해줌.
+    //..
+}
+```
+##### 문자열 예시
+- 아래는 ResourceLoader가 인식하는 접두어와 이를 이용해 리소스를 표현한 예시
+- 접두어가 없는 경우에는 리소스 로더의 구현 방식에 따라 리소스를 가져오는 방식이 달라짐. 
+- 접두어를 붙여주면 리소스 로더의 종류와 상관없이 **접두어가 의미하는 위치와 방법을 이용해 리소스 읽어옴**
+- ex)
+- file: -> file:/C:/temp/file.txt 
+- classpath: -> classpath:file.txt 
+- 없음 -> WEB-INF/test.dat -> 접두어가 없는 경우 ResourceLoader 구현에 따라 리소스 위치가 결정됨. ->ServletResouceLoader라면 서블릿컨텍스트의 루트를 기준으로 해석함
+- http: -> http://www.myserver.com/test.dat -> http 프로토콜을 사용해 접근할 수 있는 웹 상의 리로스 지정. ftp도 사용 가능
+
+##### 예시 - 스프링 애플리케이션 컨텍스트
+- ResourceLoader의 대표적인 예는 스프링 애플리케이션 컨텍스트
+- **애플리케이션 컨텍스트가 구현해야하는 인터페이스인 ApplicationContext는 ResourceLoader 인터페이스를 상속함**
+- -> 따라서 모든 애플리케이션 컨텍스트는 리소스 로더이기도 함!
+- -> 스프링 컨테이너는 리소스 로더를 다양한 목적으로 사용하고 있기 때문 
+- -> 예를들어, 애플리케이션 컨텍스트가 사용할 스프링 설정정보가 담긴 XML 파일도 리소스 로더를 이용해 Resource 형태로 읽어옴!
+- -> 그 밖에도 애플리케이션 컨텍스트가 외부에서 읽어오는 모든 정보는 리소스 로더를 사용하게 되어있음. 
+- -> 또한 빈의 프로퍼티 값을 변환할때도 리소스 로더가 자주 사용됨. 
+- --> 스프링이 제공하는 빈으로 등록 가능한 클래스에 파일을 지정해주는 프로퍼티가 존재한다면 거의 모두 Resource 탕비
+- --> Resource 타입은 빈으로 등록하지 않고 property 태그의 value를 사용해 문자열로 값을 넣는데,
+- --> 이 과정에서 문자열로 된 리소스 정보를 Resource 오브젝트로 변환해서 프로퍼티에 주입할 때도 애플리케이션 컨텍스트 자신이 리소스 로더로서 변환과 로딩 기능을 담당함.
+- ex) myFile이라는 이름의 프로퍼티가 Resource 타입이라면 아래와 같이 다양하게 지정 가능
+```
+<property name="myFile" value="classpath:com/epril/myproject/myfile.txt" />
+<property name="myFile" value="file:/data/myfile.txt" />
+<property name="myFile" value="http://www.myserver.com/test.dat" />
+```
+- -> myFile 프로퍼티 입장에서는 추상화된 Resource 타입의 오브젝트로 전달 받기 때문에 리소스가 실제 어디로 존재하는지, 어떤 종류인지 상관없이 동일 방법으로 리소스 내용 읽어옴
+
+#### Resource 이용해 XML 파일 가져오기. 
+- OxmSqlService에 Resource를 적용해서 SQL매핑정보가 담긴 파일을 다양한 위치에서 가져올 수 있게 만들기
+- 일단 스트링으로 되어 있떤 sqlmapFile 프로퍼티를 모두 Resource 타입으로 바꾸기 
+- -> 이름도 sqlmap으로 변경. 꼭 파일에서 읽어오는 것은 아닐 수 있기 때문
+- Resource 타입은 실제 소스가 어떤 것이든 상관없이 getInputStream()을 이용해 스트링으로 가져올 수 있음. 
+- -> 이를 StreamSource 클래스를 이용해서 OXM 언마살러가 필요하는 Source타입으로 만들어주면 됨. 

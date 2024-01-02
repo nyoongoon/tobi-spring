@@ -9,10 +9,13 @@ import javax.xml.transform.stream.StreamSource;
 import java.io.IOException;
 
 public class OxmSqlService implements SqlService {
+    // SqlService의 실제 구현 위임할 대상인 BaseSqlService를 인스턴스 변수로 정의
+    private final BaseSqlService baseSqlService = new BaseSqlService();
+
     //final이므로 변경 불가능. -> OxmSqlService와 OxmSqlReader는 강하게 결합되서 하나의 빈으로 등록되고 한 번에 설정 할 수 있음
     private final OxmSqlReader oxmSqlReader = new OxmSqReader();
 
-    private SqlRegistry registry = new HashMapSqlRegistry();
+    private SqlRegistry sqlRegistry = new HashMapSqlRegistry();
 
     public void setSqlRegistry(SqlRegistry sqlRegistry) {
         this.sqlRegistry = sqlRegistry;
@@ -27,17 +30,30 @@ public class OxmSqlService implements SqlService {
     }
 
     @PostConstruct
-    public void loadSql() {
-        this.oxmSqlReader.read(this.sqlRegistry);
+    public void loadSql(){
+        // OxmSqlService의 프로퍼티를 통해서 초기화된 SqlReader와 SqlRegistry를 실제 작업을 위임할 대상인 baseSqlService에 주입
+        this.baseSqlService.setSqlReader(this.oxmSqlReader);
+        this.baseSqlService.setSqlRegistry(this.sqlRegistry);
+        this.baseSqlService.loadSql(); //SQL을 등록하는 초기화 작업을 baseSqlService에 위임
     }
 
-    public String getSql(String key) throws SqlRetrievalFailureException {
-        try {
-            return this.sqlRegistry.findSql(key);
-        } catch (SqlNotFoundException e) {
-            throw new SqlRetrievalFailureException(e);
-        }
+    public String getSql(String key) throws SqlRetrievalFailureException{
+        return this.baseSqlService.getSql(key);
     }
+
+//    BaseSqlService로 위임하기
+//    @PostConstruct
+//    public void loadSql() {
+//        this.oxmSqlReader.read(this.sqlRegistry);
+//    }
+//
+//    public String getSql(String key) throws SqlRetrievalFailureException {
+//        try {
+//            return this.sqlRegistry.findSql(key);
+//        } catch (SqlNotFoundException e) {
+//            throw new SqlRetrievalFailureException(e);
+//        }
+//    }
 
 
     //private 멤버 클래스로 정의. 톱레벡 클래스인 OxmSqlService만 사용가능함.
