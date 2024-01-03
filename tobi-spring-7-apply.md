@@ -975,7 +975,108 @@ public interface ResourceLoader {
 
 #### Resource 이용해 XML 파일 가져오기. 
 - OxmSqlService에 Resource를 적용해서 SQL매핑정보가 담긴 파일을 다양한 위치에서 가져올 수 있게 만들기
-- 일단 스트링으로 되어 있떤 sqlmapFile 프로퍼티를 모두 Resource 타입으로 바꾸기 
+- 일단 스트링으로 되어 있던 sqlmapFile 프로퍼티를 모두 Resource 타입으로 바꾸기 
 - -> 이름도 sqlmap으로 변경. 꼭 파일에서 읽어오는 것은 아닐 수 있기 때문
 - Resource 타입은 실제 소스가 어떤 것이든 상관없이 getInputStream()을 이용해 스트링으로 가져올 수 있음. 
-- -> 이를 StreamSource 클래스를 이용해서 OXM 언마살러가 필요하는 Source타입으로 만들어주면 됨. 
+- -> 이를 StreamSource 클래스를 이용해서 OXM 언마살러가 필요하는 Source타입으로 만들어주면 됨.
+
+```java
+public class OxmSqlService implements SqlService {
+    public void setSqlmap(Resource sqlmap) {
+        this.oxmSqlReader.setSqlmap(sqlmap);
+    }
+
+    //..
+    private class OxmSqlReader implements SqlReader {
+        private Resource sqlmap = new ClassPathResource("sqlmap.xml", UserDao.class);
+
+        public void setSqlmap(Resource sqlmap) {
+            this.sqlmap = sqlmap;
+        }
+
+        public void read(SqlRegistry sqlRegistry) {
+            try {
+                Source source = new StreamSource(sqlmap.getInputStream());
+                //..
+            } catch (IOException e) {
+                throw new IllegalArgumentException(this.sqlmap.getFilename() + " 을 가져올 수 없습니다.");
+            }
+        }
+    }
+}
+```
+- Resource를 사용할 때는 Resource 오브젝트가 실제 리소스는 아니라는 점을 주의
+- -> Resource는 단지 리소스에 접근할 수 있는 추상화된 핸들러 -> 오브젝트가 만들어졌따고 해도 실제 리소스 존재 안할 수도 있음 
+- sqlmap 리소스 코드에서 디폴트로 설정. -> 클래스패스 리소스 바로 지정하고 싶다면 ClassPathResource 사용해오브젝트 만들 수 있음
+- -> 문자열로 패스 주입할 떄는 리소스 로더가 인식할 수 있는 문자열로 표현해주면 됨 -> classpath: 
+```xml
+<bean id="sqlService" class="springbook.user.sqlservice.OxmSqlService">
+    <property name="unmarshaller" ref="unmarshaller"/>
+    <!-- classpath:는 디폴트이므로 생략가능. 클래스 패스 위치를 지정할 떄는 클래스패스 루트부터 절대위치를 적어야함.    -->
+    <property name="sqlmap" value="classpath:springbook/user/dao/sqlmap.xml"/> 
+</bean>
+```
+- 클래스패스 대신 파일 시스템의 특정 위치에 있는 파일 읽어오고 싶은 경우
+```xml
+<bean id="sqlService" class="springbook.user.sqlservice.OxmSqlService">
+    <property name="unmarshaller" ref="unmarshaller"/>
+    <!-- file:을 사용하면 파일 시스템의 루트 디렉토리부터 시작하는 파일 위치를 나타냄  -->
+    <property name="sqlmap" value="file:/opt/resources/sqlmap.xml"/>
+</bean>
+```
+- HTTP 프로토콜로 접근 가능한 웹 리소스 가져올 수도 있음
+```xml
+<bean id="sqlService" class="springbook.user.sqlservice.OxmSqlService">
+    <property name="unmarshaller" ref="unmarshaller"/>
+    <!-- file:을 사용하면 파일 시스템의 루트 디렉토리부터 시작하는 파일 위치를 나타냄  -->
+    <property name="sqlmap" value="http://www.epril.com/resources/sqlmap.xml"/>
+</bean>
+```
+- -> 이렇게 스프링의 리소스 추상화를 이용하면 리소스의 위치와 접근 방법에 독립적인 코드를 쉽게 만들 수 있음
+- -> **스프링 애플리케이션에서 파일을 참조하는 기능을 만들 때는 Resource 타입의 추상화 기능을 사용하기.** 
+
+## 인터페이스 상속을 통한 안전한 기능확장
+- 원칙적으로 권장되진 않지만, 서버를 재시작하지 않고 긴급하게 사용 중인 SQL을 변경해야할 수도 있음
+- -> 지금까지 만든 SqlService 구현 클래스들은 **초기에 리소스로부터 SQL 정보를 읽어오면** 이를 메모리에 두고 그대로 사용함.
+- --> 이 장에서는 기존에 설계하고 개발했던 기능이 발전돼야 할 경우에 스프링 답게 접근하는 방법이 무엇인지 살펴봄. 
+
+### DI와 기능의 확장
+- DI의 가치를 제대로 얻으로면 먼저 DI에 적합한 오브젝트 설계가 필요함
+
+#### DI를 의식하는 설계
+- **객체지향 설계를 잘 하는 방법 -> DI를 의식하면서 설계하기 !!! **
+- DI를 적요하려면 커다란 오브젝트 하나만 존재해서는 안됨. -> 최소한 두 개 이상의, 의존관계를 가지고 서로 협력해서 일하는 오브젝트가 필요함.
+- -> 적절한 책임에 따라 오브젝트를 분리해줘야함. -> 항상 의존 오브젝트는 자유롭게 확장될 수 있다는 점을 염두
+- -> DI는 런타임 시에 의존 오브젝트를 다이나믹하게 연결해줘서 유연한 확장을 꾀하는 게 목적이기 때문에 항상 확장을 염두해두고 오브젝트 사이의 관계 생각하기.
+- -> DI란 미래를 프로그래밍 하는 것...
+
+#### DI와 인터페이스 프로그래밍
+- DI를 DI답게 만들려면 두 개의 오브젝트가 인터페이스를 통해 느슨하게 연결돼야함. 
+- -> 인터페이스 사용하는 첫 번째 이유는 다형성을 얻기 위해서. 
+- --> 의존 오브젝트가 가진 핵심 로직 바꿔서 적용하는 것 외에도, 프록시, 데코레이터, 어댑터 ,테스트 대역 등 다양한 목적을 위해 다형성이 활용됨.
+- -> 단지 DI 목적이 다형성을 편하게 적용하는 것때문이라면, 제약이 많고 불편한 점이 있다고해도 클래스를 사용가능.
+- --> 상속이 불가능한 final 클래스만 아니면 상속을 통해 여러 방식으로 구현 확장 가능 -> 1장에서 본 템플릿 메소드 패턴..
+- ---> 그래도 **인터페이스 사용해야하는 이유가 있따면 그것은 인터페이스 분리원칙을 통해 클라이언트와 의존 오브젝트 사이의 관계 명확하게 해줄 수 있기 때문.**
+- ex)
+- B가 B1, B2 인터페이스를 구현
+- A -> B1 사용 => B --> A는 B1이라는 창을 통해서만 B를 봄
+- C -> B2 사용 => B --> C는 B2라는 창을 통해서만 B를 봄
+- -> 인터페이스는 하나의 오브젝트가 여러 개를 구현할 수 있으므로, 하나의 오브젝트를 바라보는 창이 여러 가지 일 수도 있다는 뜻. 
+- --> 각기 다른 관심과 목적을 가지고 어떤 오브젝트에 의존하고 있을 수 있다는 의미. --> 인터페이스라는 창을 통해 필요한 것만 보겠다..
+- --> 굳이 B2라는 인터페이스에 정의된 내용에는 아무런 관심이 없는 A오브젝트가 B2인터페이스의 메소드까지 모두 노출되어 있는 B라는 클래스에 직접 의존할 필요가 없다!
+- --> 게다가 B2 인터페이스의 메소드에 변화가 발생하면 A 오브젝트에 영향을 줄 수도 있음
+- -> 인터페이스를 이렇게 클라이언트 종류에 따라 적절하게 분리해서 오브젝트를 구현하면 매우 유용함 
+#### 인터페이스 분리 원칙
+- 오브젝트가 그 자체로 충분히 응집도가 높은 작은 단위로 설계됐더라고 해도, 
+- 목적과 관심이 다른 클라이언트가 있다면 인터페이스를 통해 이를 적절하게 분리해줄 필요가 있음
+- -> 인터페이스 분리원칙
+- --> 인터페이스 사용하지 않고 클래스 직접 참조 DI를 하면 클라이언트에 특화된 의존관계를 만들어낼 방법이 없음. 
+
+### 인터페이스 상속
+- 하나의 오브젝트가 구현하는 인터페이스를 여러 개 만들어서 구분하는 이유 중 하나는
+- -> 오브젝트의 기능이 발전하는 과정에서 다른 종류의 클라이언트가 등장하기 떄문
+- -> 떄로는 인터페이스 여러개 만드는 대신 기존 인터페이스를 상속을 통해 확장하는 방법도 사용됨.
+- **인터페이스 분리 원칙이 주는 장점**
+- -> 모든 클라이언트가 자신의 관심에 따른 접근 방식을 불필요한 간섭없이 유지할 수 있다. 
+- -> 기존 클라이언트에 영향을 주지 않은 채로 오브젝트의 기능을 확장하거나 수정할 수 있음. 
+- --> 기존 클라이언트는 자신이 사용하던 인터페이스를 통해 동일한 방식으로 접근할 수만 있다면 오브젝트 변경에 영향 받지 않음. 

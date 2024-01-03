@@ -1,8 +1,11 @@
 package org.user.sqlservice;
 
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.user.dao.UserDao;
 
 import javax.annotation.PostConstruct;
+
 import javax.xml.bind.Unmarshaller;
 import javax.xml.transform.Source;
 import javax.xml.transform.stream.StreamSource;
@@ -25,8 +28,13 @@ public class OxmSqlService implements SqlService {
         this.oxmSqlReader.setUnmarshaller(unmarshaller);
     }
 
-    public void setSqlmapFile(String sqlmapFile) {
-        this.oxmSqlReader.setSqlmapFile(sqlmapFile);
+    // 리소스 추상화 이전
+//    public void setSqlmapFile(String sqlmapFile) {
+//        this.oxmSqlReader.setSqlmapFile(sqlmapFile);
+//    }
+
+    public void setSqlmap(Resource sqlmap){
+        this.oxmSqlReader.setSqlmap(sqlmap);
     }
 
     @PostConstruct
@@ -60,26 +68,33 @@ public class OxmSqlService implements SqlService {
     private class OxmSqlReader implements SqlReader {
         private Unmarshaller unmarshaller;
         private final static String DEFAULT_SQLMAP_FILE = "sqlmap.xml";
-        private String sqlmapFile = DEFAULT_SQLMAP_FILE;
 
+        //디폴트 파일은 기존과 같지만 이제는 Resource 구현클래스인 ClassPathResource를 이용한다.
+        private Resource sqlmap = new ClassPathResource("sqlmap.xml", UserDao.class);
+//        private String sqlmapFile = DEFAULT_SQLMAP_FILE;
         public void setUnmarshaller(Unmarshaller unmarshaller) {
             this.unmarshaller = unmarshaller;
         }
 
-        public void setSqlmapFile(String sqlmapFile) { //디폴트 사용하지 않을 경우 사용
-            this.sqlmapFile = sqlmapFile;
+        public void setSqlmap(Resource sqlmap){ //주입해주기 원할 때 사용
+            this.sqlmap = sqlmap;
         }
+//        public void setSqlmapFile(String sqlmapFile) { //디폴트 사용하지 않을 경우 사용
+//            this.sqlmapFile = sqlmapFile;
+//        }
+        
 
         public void read(SqlRegistry sqlRegistry) {
             try {
-                Source source = new StreamSource(
-                        UserDao.class.getResourceAsStream(this.sqlmapFile));
+//                Source source = new StreamSource(
+//                        UserDao.class.getResourceAsStream(this.sqlmapFile));
+                Source source = new StreamSource(sqlmap.getInputStream()); //Resource 사용
                 Sqlmap sqlmap = (Sqlmap) this.unmarshaller.unmarshal(source);
                 for(SqlType sql : sql.getSql()){
                     sqlRegistry.registerSql(sql.getKey(), sql.getValue());
                 }
             } catch (IOException e) {
-                throw new IllegalArgumentException(this.sqlmapFile + "을 가져올 수 없습니다.", e);
+                throw new IllegalArgumentException(this.sqlmap.getFilename() + "을 가져올 수 없습니다.", e);
             }
         }
     }
