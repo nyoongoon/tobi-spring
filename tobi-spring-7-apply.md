@@ -1080,3 +1080,62 @@ public class OxmSqlService implements SqlService {
 - -> 모든 클라이언트가 자신의 관심에 따른 접근 방식을 불필요한 간섭없이 유지할 수 있다. 
 - -> 기존 클라이언트에 영향을 주지 않은 채로 오브젝트의 기능을 확장하거나 수정할 수 있음. 
 - --> 기존 클라이언트는 자신이 사용하던 인터페이스를 통해 동일한 방식으로 접근할 수만 있다면 오브젝트 변경에 영향 받지 않음. 
+![](img/img_43.png)
+- 인터페이스를 사용해 DI를 만들었기 때문에 SqlRegistry 구현클래스인 MySqlRegistry는 오브젝트가 또 다른 제 3의 클라이언트를 위한 인터페이스를 가질 수 있다는 점
+- 새로운 클라이언트가 생겨나면 SqlRegistry를 확장시키거나 다른 인터페이스가 필요할 수도 있음
+- 현재 SqlRegistry 인터페이스는 초기에 새로운 SQL 을 등록하는 기능과 이렇게 등록된 SQL을 다시 검색해오는 두 가지 메소드를 갖고 있음.
+```java
+public interface SqlRegistry{
+    void registerSql(String key, String sql);
+    String findSql(String key) throws SqlNotFoundException;
+}
+```
+- 이미 등록된 SQL을 변경할 수 있는 기능을 넣어 확장하고 싶음
+- -> BaseSqlService 오브젝트는 SqlRegistry가 제공하는 기능이면 충분하기 때문에 SqlRegistry 자체를 수정하는건 바람직하지 않음 -> SqlRegistry는 조회 기능
+- -> 새로운 인터페이스 선언 -> SQL 관리 기능 => 업데이트 뿐 아니라 등록이나 검색 같은 기본적인 기능도 필요.
+- -> 기존의 SqlRegistry 인터페이스를 상속하고 메소드를 추가해서 새로운 인터페이스로 정의돼야함/
+
+```java
+// SQL 수정기능을 가진 확장 인터페이스
+public interface UpdatableSqlRegistry extends SqlRegistry {
+    public void updateSql(String key, String sql) throws SqlUpdateFailureException;
+    public void updateSql(Map<String, String> sqlmap) throws SqlUpdateFailureException;
+}
+```
+- -> 새로운 인터페이스를 BaseSqlService가 사용하도록 해야할까? --> 그렇지 않음!
+- -> BaseSqlService 클라이언트는 초기화를 통한 SQL 등록과 조회만을 목적으로하므로 기존 SqlRegistry로 접근하면 충분함
+- -> 반면 SQL 업데이트 작업이 필요한 새로운 클라이언트 오브젝트는 UpdatableSqlRegistry 인터페이스르 통해 SQL 레지스트리 오브젝트에 접근하도록 만들어야함!
+![](img/img_44.png)
+- -> SQL 변경 요청 담당 관리하는 클래스 SqlAdminService가 있다고 할 때 -> UpdatableSqlRegistry라는 인터페이스르 통해 SQL레지스트리 오브젝트에 접근해야함.
+- --> 하지만 실제 오브젝트 사이에 일어나는 DI 결과만 보자면 BaseSqlService와 SqlAdminService 오브젝트는 **동일한 MyUpdatableSqlRegistry 오브젝트를 DI 받아서 사용함.** 
+- -> xml 설정을 보자면 동일한 빈을 참조하도록 설정됨
+```xml
+<beans>
+    <bean id="sqlRegistry" class="springbook.user.sqlservice.MyUpdatableSqlRegistry"/>
+    <bean id="sqlService" class="springbook.user.sqlservice.BaseSqlService">
+        ...
+        <propertry name="sqlRegistry" ref="sqlRegistry" />
+    </bean>
+    <bean id="sqlAdmainService" class="springbook.user.sqlservice.SqlAdminService">
+        ...
+        <propertry name="updatableSqlRegistry" ref="sqlRegistry" />
+    </bean>
+</beans>
+```
+- -> 오브젝트 의존관계를 보자면 DI를 통해 **동일한 오브젝트에 의존**하고 있지만 설계와 코드에서는 각각SqlRegistry와 UpdatableSqlRegistry라는 **각기 다른 인터페이스에 의존**하고 있음
+```java
+public class SqlAdminService implements AdminEventListener{
+    private UpdatableSqlRegistry updatableSqlRegistry;
+    public void setUpdatableSqlRegistry(UpdatableSqlRegistry updatableSqlRegistry){
+        this.updatableSqlRegistry = updatableSqlRegistry;
+    }
+    public void updateEventListener(UpdateEvent event){
+        this.updatableSqlRegistry.updateSql(event.get(KEY_ID), event.get(SQL_ID));
+    }
+}
+```
+- BaseSqlService와 SqlAdminService는 동일한 오브젝트에 의존하고 있지만 각자의 관심과 필요에 따라서 다른 인터페이스를 통해 접근함
+- -> 인터페이스를 사용하는 DI 이기에 가능한 일. 
+- -> SQL 수정기능만 처리하는 클라이언트가 필요했다면 기존 SqlRegistry 인터페이스를 상속하지 않고 새로운 인터페이스를 추가했을 수도 있음
+- -> **정말 중요한 것은 클라이언트가 정말 필요한 기능을 가진 인터페이스를 통해 오브젝트에 접근하도록 만들었는가**
+- ㅎ
