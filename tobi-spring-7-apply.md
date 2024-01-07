@@ -1138,4 +1138,16 @@ public class SqlAdminService implements AdminEventListener{
 - -> 인터페이스를 사용하는 DI 이기에 가능한 일. 
 - -> SQL 수정기능만 처리하는 클라이언트가 필요했다면 기존 SqlRegistry 인터페이스를 상속하지 않고 새로운 인터페이스를 추가했을 수도 있음
 - -> **정말 중요한 것은 클라이언트가 정말 필요한 기능을 가진 인터페이스를 통해 오브젝트에 접근하도록 만들었는가**
-- ㅎ
+
+## DI를 이용해 다양한 방법 구현 적용하기. 
+- sql수정 시 수시로 접근하는 SQL레지스트리 정보를 잘못 수정하다 어느순간 깨진 SQL이 아나탈 수도 있음
+- -> 간단한 방식으로 어느정도 안전한 업데이트가 가능한 SQL 레지스트리를 구현해보기
+
+### ConcurrentHashMap을 이용한 수정가능 SQL 레지스트리
+- 지금까지 디폴트로 써온 HashMapRegistry는 HashMap을 사용함
+- -> HashMap으로는 멀티스레드 환경에서 예상치 못한 결과 발생 가능
+- -> 멀티스레드 환경에서 안정하게 HashMap을 조작하려면 Collections.synchronizedMap() 등을 이용해서 외부에서 동기화 해줘야함
+- -> 하지만 이렇게 HashMap에 대한 전 작업을 동기화하면 SqlService처럼 DAO의 요청이 많은 고성능 서비스에서는 성능 문제 발생
+- -> 그래서 동기화된 해시 데이터 조작에 최적화되도록 만들어진 ConcurrentHashMap을 사용하는 것이 일반적으로 권장됨 
+- -> ConcurrentHashMap은 데이터 조작 시 전체 데이터에 대해 락을 걸지 않고 조회는 락을 아예 사용하지 않음.
+- -> 어느정도 안전하면서 성능이 보장되는 동기화된 HashMap으로 이용하기에 적당함. 
