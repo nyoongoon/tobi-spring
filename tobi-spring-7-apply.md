@@ -1151,3 +1151,101 @@ public class SqlAdminService implements AdminEventListener{
 - -> 그래서 동기화된 해시 데이터 조작에 최적화되도록 만들어진 ConcurrentHashMap을 사용하는 것이 일반적으로 권장됨 
 - -> ConcurrentHashMap은 데이터 조작 시 전체 데이터에 대해 락을 걸지 않고 조회는 락을 아예 사용하지 않음.
 - -> 어느정도 안전하면서 성능이 보장되는 동기화된 HashMap으로 이용하기에 적당함. 
+
+#### 수정 가능 SQL 레지스트리 테스트
+- 일단 ConcurrentHashMap을 이용해 UpdatableSqlRegistry 구현해보기 -> 테스트 먼저 작성
+
+#### 수정 가능 SQL 레지스트리 구현
+- 기존 HashMapSqlRegistry에서 ConcurrentHashMap으로 변경하고 UpdatableSqlRegistry에 추가된 메소드 구현 
+```java
+public class ConcurrentHashMapSqlRegistry implements UpdatableSqlRegistry {
+    private Map<String, String> sqlMap = new ConcurrentHashMap<>();
+
+    @Override
+    public String findSql(String key) throws SqlNotFoundException {
+        String sql = sqlMap.get(key);
+        if (sql == null) {
+            throw new SqlNotFoundException(key + "을 이용해서 SQL을 찾을 수 없습니다.");
+        }
+        return sql;
+    }
+
+    @Override
+    public void registerSql(String key, String sql) {
+        sqlMap.put(key, sql);
+    }
+
+    @Override
+    public void updateSql(String key, String sql) throws SqlUpdateFailureException {
+        if (sqlMap.get(key) == null) {
+            throw new SqlUpdateFailureException(key + "에 해당하는 SQL을 찾을 수 없습니다.");
+        }
+        sqlMap.put(key, sql);
+    }
+
+    @Override
+    public void updateSql(Map<String, String> sqlmap) throws SqlUpdateFailureException {
+        for(Map.Entry<String, String> entry : sqlmap.entrySet()){
+            updateSql(entry.getKey(), entry.getValue());
+        }
+    }
+}
+```
+- OxmSqlService의 디폴트 설정을 ConcurrentHashMapSqlRegistry로 변경하기 위해 빈설정 변경
+```xml
+<beans>
+    <bean id="sqlService" class="springbook.user.sqlservice.OxmSqlService">
+        <property name="unmarshaller" ref="unmarshaller" />
+        <property name="sqlRegistry" ref="sqlRegistry" />
+    </bean>
+    <bean id="sqlRegistry" class="springbook.user.sqlservcice.updatable.ConcurrentHashMapSqlRegistry">
+    </bean>
+</beans>
+```
+
+### 내장형 데이터베이스를 이용한 SQL 레지스트리 만들기
+- ConcurrentHashMap이 멀티스레드 환경에서 최소한의 동시성을 보장해주고 성능도 그리 나쁜편은 아니지만 저장되는 데이터 양이 많아지고 잦은 조회와 변경이 일어나는 환경이라면 한계가 있음
+- -> 인덱스를 이용한 최적화된 검색을 지원하고 동시에 많은 요청을 처리하면서 안정적인 변경 작업이 가능한 기술은 바로 데이터베이스
+- -> SQL 레지스트리를 DB를 이용해서 만들기 -> 배보다 배꼽이 더 크지 않도록 주의 
+- -> 별도로 설치하고 셋업하는 번거로움이 없음 내장형 DB가 적당함.
+- -> 내장형 DB는 애플리케이션에 내장되서 애플리케이션과 함께 시작되고 종료되는 DB를 말함. 
+- -> Map이나 컬렉션이나 오브젝트를 이용해 메모리에 데이터를 저장해두는 방법에 비해 매우 효과적으로 등록, 수정, 검색 가능
+- -> 최적화된 락킹, 격리수준, 트랜잭션을 적용 가능. 
+
+#### 스프링의 내장형 DB 지원 기능
+- 스프링에서 일종의 내장형 DB를 위한 서비스 추상화 기능 존재
+- -> 별도의 레이어와 인터페이스 제공하지 않음 -> 어차피 DB 엑세스 할 떄 JDBC와 DataSource를 이용하면 됨.
+- -> 스프링은 내장형 DB를 초기화하는 작업을 지원하는 편리한 내장형 DB 빌더를 제공함. 
+- -> 내장형 DB 인스턴스는 보통 고유한 JDBC 접속 URL을 통해 연결을 시도하면 JDBC 드라이버 내에서 이를 생성해줌. 
+- -> 스프링 내장형 DB 빌더는 내장형 DB 사용할 떄 필요한 URL과 드라이버 등을 초기화해주는 기능이 있음
+- -> 또한 데이터 초기화를 위해 테이블 등을 생성하거나 초기 데이터를 삽입하는 SQL을 실행해주기도 함
+- -> 모든 준비가 끝나면 내장형 DB에 대한 DataSource 오브젝트를 돌려줌 -> DataSource를 통해 일반적인 DB처럼 사용가능. 
+- --> 다만 내장형 DB는 애플리케이션 안에서 직접 DB 종료 요청을 할 수도 있어야함
+- -> 스프링은 DataSource 인터페이스를 상속해서 shutdonw()이라는 내장형 DB용 메소드를 추가한 EmbeddedDatabase 인터페이스를 제공함 (인터페이스 상속을 통한 확장)
+
+#### 내장형 DB 빌더 학습 테스트
+- 내장형 DB는 시작될 떄마다 매번 테이블 새롭게 생성 -> 지속적으로 사용 가능한 테이블 생성 SQL 스크립트 준비
+```sql
+CREATE TABLE SQLMAP(
+    KEY_ VARCHAR(100) PRIMARY KEY,
+    SQL_ VARCHAR(100) NOT NULL
+)
+```
+
+- 내장형 DB 빌더는 DB 엔진을 생성하고 초기화 스크립트를 실행해서 테이블과 초기 데이터를 준비한 뒤에
+- DB에 접근할 수 있는 Connection을 생성해주는 DataSource 오브젝트를 돌려주게 된다. 
+- 정확히는 DB 셧다운 기능을 가진 EmbeddedDatabase 타입 오브젝트. 
+- 테스트에서 내장형 DB 빌더를 사용해 DB 초기화하고 EmbeddedDatabase를 가져오게 하고,
+- 스프링의 JDBC용 템플릿을 이용해 초기 데이터를 가져오는 것과 데이터를 추가로 등록하는 것을 검증하기.
+- -> 스프링이 제공하는 내장형 DB 빌더는 EmbeddedDatabaseBuilder 
+```
+// EmbeddedDatabaseBuilder 사용 방법
+new EmbeddedDatabaseBuilder() // 빌더 오브젝트 생성
+    .setType(내장형 DB종류) 
+    .addScript(초기화에 사용할 DB 스크립트의 리소스) //sql 스크립트 하나 이상 지정
+    ...
+    .build();
+```
+- EmbeddedDatabaseBuilder 빌더가 최종적으로 만들어주는 오브젝트는 DataSource 인터페이스를 상속한 EmbeddedDatabase 타입
+- -> 따라서 DataSource의 일반적인 사용 방법을 그대로 적용 가능 
+- -> 예를 들어 DataSource를 DI 받는 JdbcTemplate을 사용할 수 있음. 
