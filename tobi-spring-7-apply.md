@@ -1248,4 +1248,123 @@ new EmbeddedDatabaseBuilder() // 빌더 오브젝트 생성
 ```
 - EmbeddedDatabaseBuilder 빌더가 최종적으로 만들어주는 오브젝트는 DataSource 인터페이스를 상속한 EmbeddedDatabase 타입
 - -> 따라서 DataSource의 일반적인 사용 방법을 그대로 적용 가능 
-- -> 예를 들어 DataSource를 DI 받는 JdbcTemplate을 사용할 수 있음. 
+- -> 예를 들어 DataSource를 DI 받는 JdbcTemplate을 사용할 수 있음.
+
+#### 내장형 DB를 이용한 SqlRegistry 만들기 -> 팩토리빈 사용
+- EmbddedDatabaseBuilder는 직접 빈으로 등록한다고 바로 사용할 수 있는 게 아님
+- -> 적절한 메소드를 호출해주는 초기화 코드가 필요함 
+- --> 초기화 코드가 필요하다면 팩토리 빈으로 만드는 것이 좋음 
+- EmbeddedDatabaseBuilder 오브젝트는 한 번 초기화를 거쳐서 내장형 DB를 가동하고 이에 접근할 수 있는 EmbeddedDatabase를 만들어주면 그 이후로 사용할 일 없음
+- -> EmbeddedDatabaseBuilder를 활용해서 EmbeddedDatabase 타입의 오브젝트를 생성해주는 팩토리 빈을 만들어야함. 
+- -> 스프링에는 팩토리 빈을 만드는 번거로운 작업을 대신 해주는 전용 태그가 있음 -> 내장형 DB와 관련된 빈을 설정하고 등록해주는 기능이 있는 태그들은 jdbc 스키마에 정의됨
+```xml
+<jdbc:embedded-database id="embeddedDatabase" type="HSQL">
+    <jdbc:script location="classpath:schema.sql"/>
+</jdbc:embedded-database>
+```
+- -> 등록된 내장형 DB의 DataSource를 DI 받아서 UpdatableSqlRegistry를 구현하기
+```java
+public class EmbeddedDbSqlRegistry implements UpdatableSqlRegistry {
+    SimpleJdbcTemplate jdbc;
+
+    public void setDataSource(DataSource dataSource) {
+        jdbc = new SimpleJdbcTemplate(dataSource);
+    }
+
+    @Override
+    public void registerSql(String key, String sql) {
+        jdbc.update("insert into sqlmap(key_, sql_) values(?,?)", key, sql);
+    }
+
+    @Override
+    public String findSql(String key) throws SqlNotFoundException {
+        try {
+            return jdbc.queryForObject("select sql_ from sqlmap where key_ = ?",
+                    String.class, key);
+        } catch (EmptyResultDataAccessException e) {
+            throw new SqlNotFoundException(key + "에 해당하는 SQL을 찾을 수 없습니다.", e);
+        }
+    }
+
+    @Override
+    public void updateSql(String key, String sql) throws SqlUpdateFailureException {
+        // update는 실행 결과로 영향을 받은 레코드의 개수를 리턴함
+        // 이를 이용하면 주어진 키를 가진 SQL이 존재했는지를 간단히 확인 가능
+        int affected = jdbc.update("update sqlmap set sql_ = ? where key_ = ?", sql, key);
+        if(affected == 0){
+            throw new SqlUpdateFailureException(key + "에 해당하는 SQL을 찾을 수 없습니다.");
+        }
+    }
+
+    @Override
+    public void updateSql(Map<String, String> sqlmap) throws SqlUpdateFailureException {
+        for(Map.Entry<String, String> entry : sqlmap.entrySet()){
+            updateSql(entry.getKey(), entry.getValue());
+        }
+    }
+}
+```
+- 내장형 DB를 사용하기위해 DataSource 타입의 오브젝트를 주입 받도록 수정자를 만든 부분에 주목
+- 내장형 DB의 빈 타입은 서브인터페이스인 EmbeddedDatabase인데 위 코드에선 그냥 DataSource 타입으로 DI 받음
+- -> 인터페이스 분리 원칙
+- -> 물론 다른 인터페이스는 아니고, 상속관계에 있을 뿐. 
+- --> 그럼에도 중요한 것은 **클라이언트가 자신이 필요하는 기능의 인터페이스를 통해 DI 받아야한다는 것!!**
+- -> SQL 레지스트리는 JDBC를 이용해 DB만 접근하면 되고 DB종료기능을 가진 EmbeddedDatabase 사용 하지 않아도 충분함.
+
+#### UpdatableSqlRegistry 테스트 코드의 재사용 
+- ConcurrentHashMapSqlRegistry와 EmbeddedDbSqlRegistry 둘 다 UpdatableSqlRegistry 인터페이스를 구현하고 있으므로
+- -> 테스트 내용이 중복될 가능성이 높음
+- -> 일반적으로는 인터페이스 같은 클래스라고 하더라도 구현 방식에 따라 검증이나 테스트 방법이 달라질 수도 있고
+- -> 의존 오브젝트의 구성에 따라 목이나 스텁을 사용하기도 함
+- -> 하지만 ConcurrentHashMapSqlRegistry는 의존 오브젝트가 아예없고 
+- -> EmbeddedDbSqlRegistry의 경우에도 내장형 DB의 DataSource 빈을 의존하고 있기는 하지만 대역으로 대체하긴 어려움
+- -> DAO 테스트를 단위 테스트로 만든다고 DataSource를 대체하기는 매우 힘듬
+- -> DAO는 DB까지 연동하는 테스트를 하는 편이 효과적 
+- -> EmbeddedDbSqlRegistry도 뒤의 내장형 DB까지 연동되서 테스트 되는 게 훨씬 간편함
+- -> ConcurrentHashMapSqlReigstry와 EmbeddedDbSqlRegistry의 테스트 방법은 특별히 차이날 것이 없음
+- --> 테스트를 상속하기
+- ConcurrentHashMapSqlRegistryTest 코드 중 테스트 대상 클래스인 ConcurrentHashMapSqlRegistry에 직접 의존하는 코드는 딱 한 줄
+
+```java
+public class ConcurrentHashMapSqlRegistryTest {
+    UpdatableSqlRegistry sqlRegistry;
+    @Before
+    public void setUp() {
+        sqlRegistry = new ConcurrentHashMapSqlRegistry(); // 이곳에서만 ConcurrentHashMapSqlRegistry라는 특정 클래스에 의존함
+        //..
+    }
+    //..
+}
+```
+- UpdatableSqlRegistry 구현 클래스의 오브젝트를 생성하는 부분만 분리하면 나머지 모두 공유 가능
+- -> **바뀌는 부분만 별도의 메소드로 분리하고 추상메소드로 전환**
+```java
+public abstract class AbstractUpdatableSqlRegistryTest {
+    //UpdatableSqlRegistry 인터페이스를 구현한 모든 클래스에 대해 테스트를 만들 때 사용할 수 있는 추상 테스트 클래스
+    UpdatableSqlRegistry sqlRegistry;
+    @Before
+    public void setUp(){
+        sqlRegistry = createUpdatableSqlRegistry();
+        sqlRegistry.registerSql("KEY1", "SQL1");
+        sqlRegistry.registerSql("KEY2", "SQL2");
+        sqlRegistry.registerSql("KEY3", "SQL3");
+    }
+    // 테스트 픽스처를 생성하는 부분만 추상 메소드로 만들고 서브클래스에서 이를 구현하도록 하기
+    abstract protected UpdatableSqlRegistry createUpdatableSqlRegistry();
+    
+    //..
+}
+```
+- 추상 테스트 클래스 상속하는 것으로 변경
+```java
+public class ConcurrentHashMapSqlRegistryTest extends AbstractUpdatableSqlRegistryTest {
+    @Override
+    protected UpdatableSqlRegistry createUpdatableSqlRegistry() {
+        return new ConcurrentHashMapSqlRegistry();
+    }
+}
+```
+- 같은 방식으로 EmbeddedDbSqlRegistry 테스트 만들기 -> 내장 DB 초기화&종료 때문에 추가 코드 필요
+- -> SQLMAP 테이블을 생성하는 SQL 스크립트는 sqlRegistrySchema.sql 파일에 저장해두고
+- -> 내장형 DB 빌더가 사용할 수 있게 해주기
+- -> 초기화 작업중에 생성된 EmbeddedDatabase는 인스턴스 변수에 저장헀다가 @After 메소드에서 DB 중지 시킬 때 사용

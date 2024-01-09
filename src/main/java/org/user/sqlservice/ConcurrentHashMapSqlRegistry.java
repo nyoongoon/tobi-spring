@@ -1,5 +1,7 @@
 package org.user.sqlservice;
 
+import org.user.sqlservice.updatable.UpdatableSqlRegistry;
+
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 

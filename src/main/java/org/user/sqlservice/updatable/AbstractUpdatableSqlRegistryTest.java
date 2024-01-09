@@ -1,4 +1,4 @@
-package org.user.sqlservice;
+package org.user.sqlservice.updatable;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -9,16 +9,21 @@ import java.util.Map;
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
 
-public class ConcurrentHashMapSqlRegistryTest {
+public abstract class AbstractUpdatableSqlRegistryTest {
+    //UpdatableSqlRegistry 인터페이스를 구현한 모든 클래스에 대해 테스트를 만들 때 사용할 수 있는 추상 테스트 클래스
     UpdatableSqlRegistry sqlRegistry;
 
     @Before
-    public void setUp() {
-        sqlRegistry = new ConcurrentHashMapSqlRegistryTest();
+    public void setUp(){
+        sqlRegistry = createUpdatableSqlRegistry();
         sqlRegistry.registerSql("KEY1", "SQL1");
         sqlRegistry.registerSql("KEY2", "SQL2");
         sqlRegistry.registerSql("KEY3", "SQL3");
     }
+
+    // 테스트 픽스처를 생성하는 부분만 추상 메소드로 만들고 서브클래스에서 이를 구현하도록 하기
+    abstract protected UpdatableSqlRegistry createUpdatableSqlRegistry();
+
 
     @Test
     public void find() {
