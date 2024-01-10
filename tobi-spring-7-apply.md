@@ -1368,3 +1368,106 @@ public class ConcurrentHashMapSqlRegistryTest extends AbstractUpdatableSqlRegist
 - -> SQLMAP 테이블을 생성하는 SQL 스크립트는 sqlRegistrySchema.sql 파일에 저장해두고
 - -> 내장형 DB 빌더가 사용할 수 있게 해주기
 - -> 초기화 작업중에 생성된 EmbeddedDatabase는 인스턴스 변수에 저장헀다가 @After 메소드에서 DB 중지 시킬 때 사용
+```java
+public class EmbeddedDbSqlRegistryTest extends AbstractUpdatableSqlRegistryTest {
+    EmbeddedDatabase db;
+    @Override
+    protected UpdatableSqlRegistry createUpdatableSqlRegistry() {
+        db = new EmbeddedDatabaseBuilder()
+                .setType(HSQL).addScript(
+                        "classpath:springbook/user/sqlservice/updatable/sqlRegistrySchema.sql")
+                .build();
+        EmbeddedDbSqlRegistry embeddedDbSqlRegistry = new EmbeddedDbSqlRegistry();
+        embeddedDbSqlRegistry.setDataSource(db);
+
+        return embeddedDbSqlRegistry;
+    }
+    @After
+    public void tearDown() {
+        db.shutdown();
+    }
+}
+```
+```xml
+<beans>
+    <bean id="sqlService" class="springbook.user.sqlservice.OxmSqlService">
+        <property name="unmarshaller" ref="unmarshaller" />
+        <property name="sqlRegistry" ref="sqlRegistry" />
+    </bean>
+    <bean id="sqlRegistry" class="springbook.user.sqlservcice.updatable.EmbeddedDbSqlRegistry">
+        <property name="dataSource" ref="embeddedDatabase" />
+    </bean>
+</beans>
+```
+
+### 트랜잭션 적용
+- 맵으로 SQL 키와 쌍을 전달받는 updateSql()에 에러가 발생하면 트랜잭션 적용되어 있지 않으므로, 에러 이후 SQL등록 작업이 적용되지 않음
+- -> 기본적으로 HashMap과 같은 컬렉션은 트랜잭션 개념을 적용하기가 매우 힘듬
+- -> 여러개의 엘리먼트를 트랜잭션과 같은 원자성이 보장된 상태에서 변경하려면 매우 복잡한 과정이 필요
+- -> 내장형 DB 사용하는 경우 트랜잭션 적용이 쉬움 
+- -> SQL 레지스트리라는 제한된 오브젝트 내에서 서비스에 특화된 간단한 트랜잭션이 필요한 경우라면 AOP 보단 간단히 트랜잭션 추상화 API 직접 사용하는 게 편리
+
+#### 다중 SQL 수정에 대한 트랜잭션 테스트
+- -> 트랜잭션이 적용되면 성공, 아니라면 실패되는 테스트를 만들기
+```java
+class EmbeddedDbSqlRegistryTest extends AbstractUpdatableSqlRegistryTest {
+    //..
+    @Test
+    public void transactionUpdate(){
+        checkFind("SQL1", "SQL2", "SQL3"); // 초기상태확인 -> 롤백 후 상태가 처음과 동일하다는 것 비교 목적
+
+        Map<String, String> sqlmap = new HashMap<String, String>();
+        sqlmap.put("KEY1", "Modified1");
+        sqlmap.put("KEY9999!@#$", "Modified9999"); // 존재하지 않는 키 -> 에러 발생 -> 롤백 여부 확인
+
+        try{
+            sqlRegistry.updateSql(sqlmap);
+            fail(); // 예외가 발생되지 않으면 테스트 실해
+        }catch (SqlUpdateFailureException e){
+            checkFind("SQL1", "SQL2", "SQL3");
+        }
+    }   
+}
+```
+
+### 코드를 이용한 트랜잭션 적용
+- EmbeddedDbSqlRegistry의 updateSql()에 트랜잭션 기능 추가하기
+- -> SimpleJdbcTemplate을 통해 JDBC 처리를 하고 있으므로 스프링 트랜잭션 추상화 서비스를 적용할 수 있음.
+- -> PlatformTransactionManager를 직접 사용해서 트랜잭션 처리 코드를 만들어도 되지만 
+- -> 그보다 간결하게 트랜잭션 적용 코드에 템플릿/콜백 패턴을 적용한 TransactionTemplate을 쓰는 편이 나음
+- EmbeddedDbSqlRegistry가 DataSource를 DI 받아서 트랜잭션 매니저와 템플릿을 만들게 하기
+- -> 일반적으로는 트랜잭션 매니저를 싱글톤 빈으로 등록해서 사용하는데, AOP를 통해 만들어지는 트랜잭션 프록시가 같은 트랜잭션 매니저를 공유해야하기 때문
+- 반면에 EmebeddedDbsqlRegistry가 사용할 내장형 DB에 대한 트랜잭션 매니저는 공유할 필요가 없음
+- -> 번거롭게 빈으로 등록하는 대신 EmebeddedDbSqlRegistry 내부에서 직접 만들어서 사용하는 게 나음
+- 사실 PlatformTransactionManager 오브젝트가 아니라 TransactionTemplate을 이용해 트랜잭션 기능을 사용할 것이므로
+- -> 트랜잭션 매니저 오브젝트는 트랜잭션 템플릿을 만들기 위해서만 사용하고, 따로 저장해두지 않아도 상관없음
+- TransactionTemplate은 멀티스레드 환경에서 공유해도 안전하게 만들어졌으므로 처음 만들 떄 인스턴스 변수에 저장하고 사용하기
+```java
+public class EmbeddedDbSqlRegistry implements UpdatableSqlRegistry {
+    SimpleJdbcTemplate jdbc;
+    TransactionTemplate transactionTemplate; //JdbcTemplate과 트랜잭션을 동기화해주는 트랜잭션 템플릿. 멀티스레드 환경에서 공유 가능
+
+    public void setDataSource(DataSource dataSource) {
+        jdbc = new SimpleJdbcTemplate(dataSource);
+        //transactionTemplate 추가
+        //dataSource로 TransactionManager를 만들고 이를 이용해 TransactionTemplate을 생성하기
+        transactionTemplate = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
+    }
+    //..
+    @Override
+    public void updateSql(final Map<String, String> sqlmap) throws SqlUpdateFailureException {
+        // sqlmap은 익명 내부 클래스로 만들어지는 콜백 오브젝트 안에서 사용되는 것이라 final로 선언해줘야함.
+        // 트랜잭션 템플릿이 만드는 트랜잭션 경계 안에서 동작할 코드를 콜백형태로 만들고 TransactionTemplate의 execute()에 전달
+        transactionTemplate.execute(new TransactionCallbackWithoutResult() {
+            @Override
+            protected void doInTransactionWithoutResult(TransactionStatus status) {
+                for(Map.Entry<String, String> entry : sqlmap.entrySet()){
+                    updateSql(entry.getKey(), entry.getValue());
+                }
+            }
+        });
+    }
+}
+```
+- -> 트랜잭션 테스트 성공
+- -> 더이상 쪼개지면 안되는 작업의 최소 단위인 트랜잭션은 이 정도의 테q스트라면 충분히 확인 가능 

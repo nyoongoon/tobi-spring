@@ -27,10 +27,10 @@ public abstract class AbstractUpdatableSqlRegistryTest {
 
     @Test
     public void find() {
-        checkFindResult("SQL1", "SQL2", "SQL3");
+        checkFind("SQL1", "SQL2", "SQL3");
     }
     // 반복적으로 검증하는 부분은 별도의 메소드로 분리
-    public void checkFindResult(String expected1, String expected2, String expected3) {
+    public void checkFind(String expected1, String expected2, String expected3) {
         assertThat(sqlRegistry.findSql("KEY1"), is(expected1));
         assertThat(sqlRegistry.findSql("KEY2"), is(expected2));
         assertThat(sqlRegistry.findSql("KEY3"), is(expected3));
@@ -44,7 +44,7 @@ public abstract class AbstractUpdatableSqlRegistryTest {
     @Test
     public void updateSingle(){
         sqlRegistry.updateSql("KEY2", "Modified2");
-        checkFindResult("SQL1", "Modified2", "SQL3");
+        checkFind("SQL1", "Modified2", "SQL3");
     }
 
     @Test
@@ -54,7 +54,7 @@ public abstract class AbstractUpdatableSqlRegistryTest {
         sqlmap.put("KEY3", "Modified3");
 
         sqlRegistry.updateSql(sqlmap);
-        checkFindResult("Modified1", "SQL2", "Modified3");
+        checkFind("Modified1", "SQL2", "Modified3");
     }
 
     @Test(expected = SqlUpdateFailureException.class)
