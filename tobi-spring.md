@@ -242,17 +242,17 @@ public class UserDaoTest { // 클라이언트 오브젝트
 - cf) 추상팩토리 패턴, 팩토리 메소드 패턴과는 다름
 
 ```java
-public class DaoFactory {
+public class DaoFactory { //핵심코드가 런타임 시 동적으로 관계를 맺고 동작하게 만들어줌 -> IoC 프레임워크 메타정보 역할
     public UserDao userDaoJdbc() {
-        ConnectionMaker connectionMaker = new DConnectionMaker();
-        UserDao userDaoJdbc = new UserDao(connectionMaker);
+        ConnectionMaker connectionMaker = new DConnectionMaker(); // DB 설정 정보
+        UserDao userDaoJdbc = new UserDao(connectionMaker); // 핵심 비즈니스 로직
         return userDaoJdbc;
     }
 }
 ```
 
 ```java
-public class UserDaoTest {
+public class UserDaoTest { // DaoFactory를 활용해 핵심 코드가 관계를 맺고 동작하는 모든 과정을 제어 -> 일종의 IoC 프레임워크 
     public static void main(String[] args) throws ClassNotFoundException, SQLException {
         UserDao dao = new DaoFactory().userDaoJdbc();
         //...
