@@ -27,5 +27,8 @@
     <orderEntry type="library" name="Maven: org.springframework:spring-aop:6.0.7" level="project" />
     <orderEntry type="library" name="Maven: org.springframework:spring-beans:6.0.7" level="project" />
     <orderEntry type="library" name="Maven: org.springframework:spring-tx:6.1.0" level="project" />
+    <orderEntry type="library" name="Maven: com.mailersend:java-sdk:1.0.0" level="project" />
+    <orderEntry type="library" name="Maven: com.google.code.gson:gson:2.8.7" level="project" />
+    <orderEntry type="library" name="Maven: commons-io:commons-io:2.7" level="project" />
   </component>
 </module>

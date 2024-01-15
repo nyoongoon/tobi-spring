@@ -1559,3 +1559,94 @@ public class TestApplicationContext {
 ```
 
 #### <context:annotation-config /> 제거
+- @PostConstruct를 붙인 메소드가 빈이 초기화된 후 자동으로 실행되기 위한 목적
+- @Configuration 설정 클래스를 사용하는 컨테이너는 직접 @PostConstruct 를 처리하는 빈후처리기를 등록해줌
+#### <bean>의 전환 - 메소드 리턴값 주의 (인터페이스 지향)
+- @Bean이 붙은 public 메소드로 만들어주기 -> 메소드 이름은 \<bean\>의 id 값으로 하기
+- 메소드의 리턴값 주의하기. 
+- -> 많은 경우 class 애트리뷰트의 클래스 그대로 사용하지만, 정확히 하려면 빈을 주입받아서 사용하는 다른 빈이 어떤 타입으로 이 빈의 존재를 알고 있는 지 확인 필요
+```xml
+<bean id="dataSource" class="org.springframework.jdbc.datasource.SimpleDriverDataSource">
+    <property name="driverClass" value="com.mysql.jdbc.Driver" />
+    <property name="url" value="jdbc:mysql://localhost/springbook?characterEncoding=UTF-8" />
+    <property name="username" value="pring" />
+    <property name="password" value="book" />
+</bean> 
+```
+- 위처럼 dataSource 빈은 UserDao 등에서 DataSource 타입의 프로퍼티를 통해 주입받아 사용함
+- -> SimpleDriverDataSource 클래스는 DataSource의 한 가지 구현일 뿐
+- -> 구현 클래스를 변경하더라도 해당빈의 의존하는 코드가 수정되어서는 안됨
+- -> 빈을 정의하는 dataSource() 메소드의 리턴값을 SimpleDriverDataSource를 해버리면
+- -> 받는곳에서 SimpleDriverDataSource를 타입으로 주입받을 위험이 있음.  --> DataSource 인터페이스로 리턴값 설정
+- --> 하지만 @Bean 메소드 내부에서 변수의 타입은 구현클래스로 선언하기!
+```
+// DataSource dataSource = new SimpleDriverDataSource(); 이렇게 빈등록하면 안됨!
+SimpleDriverDataSource dataSource = new SimpleDriverDataSource();
+```
+- -> 프로퍼티 주입 시 setUrl()이나 setUsername() 같은 수정자 메소드가 필요한데 DataSource에는 이런 메소드가 존재하지 않음
+- -> DataSource는 DB 커넥션을 가져오는 기능만 정의함
+
+```java
+@Configuration
+class configEx() {
+    @Bean
+    public DataSource dataSource() { //인터페이스로 반환 주의
+        SimpleDriverDataSource dataSource = new SimpleDriverDataSource(); //구현체 클래스로 선언 주의
+        dataSource.setDriverClass(Driver.class);
+        dataSource.setUrl("jdbc:mysql://localhost/springbook?characterEncoding=UTF-8");
+        dataSource.setUsername("spring");
+        dataSource.setPassword("book");
+        return dataSource;
+    }
+}
+```
+- testUserService 빈을 자바 코드로 옮기다 보면 TestUserService 클래스를 찾을 수 없다는 에러를 만나게 됨 
+- TestUserService 클래스는 테스트 용도로 만든 것이므로 UserServiceTest의 **스태틱 멤버 클래스**로 정의함
+- \<bean\>에서 class로 지정해서 잘 사용했던 TestUserService 클래스르 자바 코드에서는 왜 찾을 수 없을까?
+- -> 그것은 TestUserService가 public 접근 제한자를 갖고 있지 않기 때문
+- -> 스프링의 \<bean\>에 넣는 클래스는 굳이 public이 아니어도 됨.
+- -> **xml설정은 내부적으로는 리플렉션 API를 이용하기 때문에 private 접근을 제한해도 빈의 클래스로 사용할 수 있음**
+- -> 자바 코드에서 참조할 때 패키지가 다르면 public으로 접근 제한자를 바꿔줘야함!
+- xml에 설정한 빈을 자바 코드에서 주입 받을 때? -> @Autowired
+
+```java
+import org.springframework.beans.factory.annotation.Autowired;
+import org.user.sqlservice.SqlService;
+
+class configEx() {
+    @Autowired
+    SqlService sqlService;
+    @Bean
+
+    public UserDao userDao() {
+        UserDaoJdbc dao = new UserDaoJdbc();
+        dao.setDataSource(dataSource());
+        dao.setSqlService(this.sqlService()); // 아직 xml에 있을 때 컴파일 에러 어떻게 ?
+        return dao;
+    }
+}
+```
+```
+@Resource DataSource embeddedDatabase;
+```
+- @Resource 애노테이션은 @Autowired와 유사하게 필드에 빈을 주입 받을 때 사용함
+- -> 차이점은 **@Autowired는 필드의 타입**을 기준으로 빈을 찾고
+- -> **@Resource는 필드 이름**을 기준으로 한다는 점 !! --> DataSource 타입 중복이므로 이름으로 찾기!!
+
+#### 전용 태그 전환 
+```
+<jdbc:embedded-database id="embeddedDatabase" type="HSQL">
+    <jdbc:script location = "classpath:springbook/user/sqlservice/updatable/sqlRegistrySchema.sql"/>
+</jdbc:embedded-database>
+<tx:annotatoin-driven />
+```
+- 전용태그도 \<bean\>과 마찬가지로 빈을 등록하는데 사용됨
+- -> 내부에 실제로 어떤 빈이 만들어지는지 파악하기 쉽지 않음
+- SQL 서비스에서 사용하는 내장형 DB를 생성하는 jdbc:embedded-database 전용태그는 type에 지정한 내장형 DB를 생성하고
+- jdbc:script로 지정한 스크립트로 초기화한 뒤에 DataSource타입 DB의 커넥션 오브젝트를 빈으로 등록해줌. 빈의 타입ㅇs DataSource 
+- -> EmbeddedDatabaseBuilder 이용하기
+- \<tx:annotation-driven \> 대체하기
+- -> 스프링은 이런 전용 태그 대체하는 어노테이션을 제공해줌
+- -> @EnableTransactionManagement
+
+### 빈 스캐닝과 자동 와이어링
