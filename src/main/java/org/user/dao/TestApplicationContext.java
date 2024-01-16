@@ -1,6 +1,8 @@
 package org.user.dao;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.ImportResource;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -25,9 +27,13 @@ import java.sql.Driver;
 @Configuration
 //@ImportResource("/test-applicationContext.xml") 완전 대체함
 @EnableTransactionManagement
+@ComponentScan(basePackages="springbook.user")
 public class TestApplicationContext {
 //    @Autowired
 //    SqlService sqlService;
+    @Autowired
+    UserDao userDao;
+
     @Bean
     public DataSource dataSource() { //인터페이스로 반환 주의
         SimpleDriverDataSource dataSource = new SimpleDriverDataSource(); //구현체 클래스로 선언 주의
@@ -43,24 +49,24 @@ public class TestApplicationContext {
         tm.setDataSource(dataSource());
         return tm;
     }
-    @Bean
-    public UserDao userDao(){
-        UserDaoJdbc dao = new UserDaoJdbc();
-        dao.setDataSource(dataSource());
-        dao.setSqlService(sqlService()); // 아직 xml에 있을 때 컴파일 에러 어떻게 ?
-        return dao;
-    }
+//    @Bean --> @Component로 대체
+//    public UserDao userDao(){
+//        UserDaoJdbc dao = new UserDaoJdbc();
+//        dao.setDataSource(dataSource());
+//        dao.setSqlService(sqlService()); // 아직 xml에 있을 때 컴파일 에러 어떻게 ?
+//        return dao;
+//    }
     @Bean
     public UserService userService(){
         UserServiceImpl service = new UserServiceImpl();
-        service.setUserDao(userDao());
+        service.setUserDao(this.userDao);
         service.setMailSender(mailSender());
         return service;
     }
     @Bean
     public UserService testUserService(){
         UserServiceTest.TestUserService testService = new UserServiceTest.TestUserService();
-        testService.setUserDao(userDao());
+        testService.setUserDao(this.userDao);
         testService.setMailSender(mailSender());
         return testService;
     }

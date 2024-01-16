@@ -1650,3 +1650,66 @@ class configEx() {
 - -> @EnableTransactionManagement
 
 ### 빈 스캐닝과 자동 와이어링
+#### @Autowired를 이용한 자동 와이어링
+- 스프링은 @Autowired가 붙은 수정자 메소드가 있으면 파라미터 타입을 보고 주입 가능한 타입의 빈을 모두 찾음. 
+- -> 두개 이상 존재하면 그 중에서 프로퍼티와 동일한 이름의 빈이 있는지 찾음.
+- **필드의 접근 제한자가 private인 것도 문제가 되지 않음**
+- -> 스프링은 리플렉션 API를 이용해 제약조건을 우회해서 값을 넣어줌. 
+- -> @Autowired와 같은 자동 와이어링은 빈 설정정보를 보고 다른 빈과 의존관계가 어떻게 맺어져 있는지 한눈에 파악하기 힘들다는 단점
+#### @Componenet를 이용한 자동 빈 등록 
+- @Component는 클래스에 부여되어 빈스캐너를 통해 자동으로 빈으로 등록됨. 
+- @Component 또는 @Component를 메터 애노테이션으로 갖고 있는 애노테이션이 붙은 클래스가 자동 빈등록 대상이됨. 
+- @Component로 등록된 빈을 사용하는 빈등록 메소드가 컴파일에러나는 경우 -> @Autowired로 주입
+- @Component 애노테이션이 달린 클래스를 자동으로 찾아서 빈을 등록해주게 하려면
+- -> 빈 스캔 기능을 사용하겠다는 애노테이션 정의가 필요함. 
+- -> 특정 패키지 아래서만 찾도록 기준이 되는 패키지를 지정해줄 필요가 있음. -> @ComponentScan
+```java
+@Configuration
+//@ImportResource("/test-applicationContext.xml") 완전 대체함
+@EnableTransactionManagement
+@ComponentScan(basePackages="springbook.user")
+public class TestApplicationContext {
+    //    @Autowired
+//    SqlService sqlService;
+    @Autowired
+    UserDao userDao;
+    //..
+}
+@Component
+public class UserDaoJdbc implements UserDao {}
+```
+- 기준패키지는 여러개 넣어도 됨 -> 지정한 패키지 아래 모든 서브패키지를 다 검색하므로 springbook.user.dao 패키지 아래에 있는 UserDaoJdbc 클래스도 검색 대상이 됨
+- @Component가 붙은 클래스가 발견되면 새로운 빈 자동 추가 -> 빈의 아이디는 따로 지정하지 않았으면 클래스 이름의 첫글자를 소문자로
+- -> 위는 userDao 빈이 아니라 userDaoJdbc 빈이 아닐까? 
+- -> 괜찮을 수도 있고 아닐수도 있음 -> UserDaoJdbc클래스를 빈으로 주입받는 빈에서 UserDaoJdbc가 아닌 UserDao로 주입받기 떄문
+- -> @Autowired UserDao 타입으로 필드 선언 
+- -> userDaoJdbc빈은 UserDao 인터페이스를 구현하고 있으니 @Autowired에 의해 자동와이어링 대상이됨.
+- -> @Component가 붙은 클래스의 이름 대신 다른 빈 아이디로 설정 -> @Component("anotherId")
+- 빈 자동등록에 @Component 애노테이션만 사용할 수 있는 것은 아니고 @Component 애노테이션을 메타 애노테이션으로 갖고 있는 애노테이션도 사용할 수 있음. 
+- 애노테이션은 @interface 키워드를 이용해 정의함.
+- @Component애노테이션은 아래와 같이 정의되어 있음
+```java
+public @interface Component{
+    //..
+}
+```
+- 스프링은 @Component 외에도 자동 빈등록이 가능하게 해줌
+- -> 빈스캔 검색 대상으로 만드는것 외에도 **부가적인 용도의 마커로 사용**하게 하기 위함
+- AOP에서 포인트컷 작성할 때도 애노테이션을 사용 가능
+- -> 애노테이션 포인터컷을 이용하면 패키지나 클래스 이름 패턴 대신 애노테이션 기준으로 어드바이스 적용 대상을 선별 가능.
+- ex) @Transactional
+- 애노테이션은 상속할 수 없고, 인터페이스를 구현할 수도 없음
+- -> 여러개의 애노테이션에 공통적인 속성을 부여하려면 메타 애노테이션을 이용함. 
+- -> **메타 애노테이션은 애노테이션 정의에 부여된 애노테이션을 말함.** 
+- ex) SNS서비스 접속 기능 제공 빈에 AOP 포인트컷 지정할수 있도록 구분이 필요 -> @SnsConnector 애노테이션 생성하기
+- -> @SnsConnector 애노테이션을 정의할 때 **메타 애노테이션으로 @Component를 부여**해주면 클래스마다 @Component를 딸 ㅗ붙여주지 않아도 자동 빈 등록 대상으로 만듬
+
+```java
+@Component
+public @interface SnsConnector{}
+```
+```java
+@SnsnConnector // 자동 빈 등록 대상이 됨
+public class FacebookConnector{}
+```
+- 스프링은 DAO빈을 자동등록 대상으로 만들 때 사용하도록 @Repository 애노테이션을 제공. -> @Component를 메타애노테이션으로 갖고 있음. 

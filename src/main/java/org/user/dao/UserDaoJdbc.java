@@ -2,6 +2,7 @@ package org.user.dao;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Component;
 import org.user.domain.User;
 import org.user.sqlservice.SqlService;
 
@@ -11,6 +12,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
+@Component
 public class UserDaoJdbc implements UserDao {
     private RowMapper<User> userMapper =
             new RowMapper<User>() {
