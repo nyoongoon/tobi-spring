@@ -1,11 +1,14 @@
 package org.user.service;
 
+import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import org.user.dao.Level;
 import org.user.dao.UserDao;
 import org.user.domain.User;
 
 import java.util.List;
 
+@Service("userService")
 public class UserServiceImpl implements UserService{
     public static final int MIN_LOGCOUNT_FOR_SILVER = 50;
     public static final int MIN_RECCOMEND_FOR_GOLD = 30;

@@ -1713,3 +1713,86 @@ public @interface SnsConnector{}
 public class FacebookConnector{}
 ```
 - 스프링은 DAO빈을 자동등록 대상으로 만들 때 사용하도록 @Repository 애노테이션을 제공. -> @Component를 메타애노테이션으로 갖고 있음. 
+
+### 컨텍스트 분리와 @Import
+- 어플리케이션 동작 DI 정보와 테스트를 위한 DI정보가 지금은 하난의 파일에 혼재되어 있음 -> DI 정보 분리!
+#### 테스트용 컨텍스트 분리
+- 자동 빈 등록 적용한 userDao와 userService는 운영과 테스트에 필요
+- DB연결(dataSource())과 트랜잭션관리(transactionManager()), SQL 서비스(sqlService())도 항상 필요
+- testUserService는 테스트. mailSender빈은 애매하지만 테스트로 생각. -> 따로 옮기기
+- DI 설정 정보 분리 방법 -> DI설정 클래스 추가, 관련 빈설정 애노테이션, 필드, 메소드 옮기기
+```java
+@Configuration
+public class TestAppContext {
+    @Bean
+    public UserService testUserService() {
+        return new UserServiceTest.TestUserService();
+    }
+
+    @Bean
+    public MailSender mailSender() {
+        return new DummyMailSender();
+    }
+}
+```
+- TestUserService에 @Component 붙이고 @ComponentScan이용해 자동등록 되게하는 것은 지양..
+- -> 테스트용 빈과 애플리케이션 빈의 설정정보 클래스를 분리해서 만들었다면 스캔 대상 위치도 분리될 필요가 있음.
+
+```java
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(classes = {TestAppContext.class, AppContext.class})
+public class UserDaoTest{
+    //..
+}
+```
+- AppContext의 SQL 서비스용 빈은 다른 빈 설정과 성격이 다름
+- -> SQL 서비스 그자체로 독립적인 모듈처럼 취급하는게 나아 보임.. 
+- -> SqlService의 구현 클래스와 이를 지원하는 보조 빈들은 다른 애플리케이션을 구성하는 빈과 달리 독립적으로 개발되거나 변경될 가능성이 높음
+- -> Configuration 클래스 하나 더 만들기
+```java
+@Configuration
+public class SqlServiceContext {
+    //..
+}
+```
+- 설정 클래스가 추가되었으니까 또 테스트 코드의 @ContextConfiguration의 내용을 수정?
+- -> SQL 서비스와 관련된 빈 정보는 분리하기 했지만 애플리케이션 동작 시 항상 필요한 정보 
+- -> AppContext와 분리하긴 했어도 긴밀하게 연결해주는 게 좋음 
+- DI설정 정보로 TestApplicationContext만 지정하고, XML 설정정보는 TestApplicationContext에서 @ImportResource를 이용해 가져왔었음
+- -> 같은 방법은 DI 설정 클래스에도 적용하기 
+- AppContext가 메인 설정정보가 되고 SqlServiceContext는 AppContext에 포함되는 보조 설정정보로 사용.. 
+- -> 자바 클래스로 된 설정정보 가져올 때는 @ImportResource 대신 @Import 사용!!
+```java
+@Configuration
+@EnableTransactionManagement
+@ComponentScan(basePackages="springbook.user")
+@Import(SqlServiceContext.class)
+public class AppContext {
+    //..
+}
+```
+
+### 프로파일 (profile)
+- 테스트 환경환경은 외부나 서버 영향 안받도록 DummyMailSender라는 테스트용 클래스 만들어서 사용했음. 
+- 운영 시스템에서는 실제 동작하는 메일 서버를 통해 메일을 발송하는 기능이 있는 메일 발송 서비스빈이 필요..
+- 현재 MailSender 빈은 TestAppContext에만 존재..
+- -> AppContext에서 실제 애플리케이션이 동작할 때 사용될 MailSender 타입 빈설정 넣어주기. 
+```java
+@Configuration
+public class ProductionAppContext{
+    //..
+    @Bean
+    public MailSender mailSender(){
+        JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
+        mailSender.setHost("mail.mycompany.com");
+        return mailSender;
+    }
+}
+```
+- UserServiceTest 실행 시 AppContext, TestAppContext 에서 각각 mailSender() 빈이 생성되어 충돌.
+- **테스트 환경과 운영환경에서 각기 다른 빈 정의가 필요한 경우가 있음!!**
+- 운영환경에서는 반드시 필요하지만 테스트 실행중에 배제돼야 하는 빈 설정을 별도의 설정 클래스로 만들어 따로 관리..
+- -> 운영환경에서는 AppContext와 ProductionAppContext 두개의 클래스가 DI 사용하게 하면 됨.
+- -> 이런식의 파일 조합을 이용한 DI 설정은 불편함.. 
+
+### @Profile과 ActiveProdiles 
