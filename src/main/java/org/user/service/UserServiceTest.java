@@ -8,8 +8,11 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.user.dao.AppContext;
 import org.user.dao.Level;
 import org.user.dao.UserDao;
 import org.user.dao.UserDaoJdbc;
@@ -30,7 +33,9 @@ import static org.user.service.UserServiceImpl.MIN_LOGCOUNT_FOR_SILVER;
 import static org.user.service.UserServiceImpl.MIN_RECCOMEND_FOR_GOLD;
 
 @RunWith(SpringJUnit4ClassRunner.class)
-@ContextConfiguration(locations = "/org/user/dao/DaoFactory.java")
+//@ContextConfiguration(locations = "/org/user/dao/DaoFactory.java")
+@ActiveProfiles("test")
+@ContextConfiguration(classes = AppContext.class)
 public class UserServiceTest {
 
     @Autowired

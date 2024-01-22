@@ -1784,7 +1784,7 @@ public class ProductionAppContext{
     @Bean
     public MailSender mailSender(){
         JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
-        mailSender.setHost("mail.mycompany.com");
+        mailSender.setHost("localhost");
         return mailSender;
     }
 }
@@ -1795,4 +1795,103 @@ public class ProductionAppContext{
 - -> 운영환경에서는 AppContext와 ProductionAppContext 두개의 클래스가 DI 사용하게 하면 됨.
 - -> 이런식의 파일 조합을 이용한 DI 설정은 불편함.. 
 
-### @Profile과 ActiveProdiles 
+### @Profile과 ActiveProdfles 
+- **실행환경에 따라 빈 구성이 달라지는 내용을 프로파일로 정의**해서 만들어두고, 실행 시점에 어떤 프로파일의 빈 설정을 사용할지 지정하는 것
+- 프로파일은 간단한 이름과 빈 설정으로 구성됨
+- 프로파일을 적용하면 하나의 설정 클래스만 가지고 환경에 따라 다른 빈 설정 조합을 만들어낼 수 있다.
+- 프로파일은 설정 클래스 단위로 지정한다.
+
+```java
+@Configuration
+@Profile("test")
+public class TestAppContext{}
+@Configuration
+@Profile("production")
+public class ProductionAppContext{}
+```
+- 프로파일 지정하지 않은 설정클래스는 디폴트 프로파일로 항상 적용됨.
+- -> 모든 설정 클래스를 부담없이 메인 설정 클래스에서 @Import할 수 있다는 장점이 있음!
+```java
+@Configuration
+@EnableTransactionManagement
+@ComponentScan(basePackages="springbook.user")
+@Import({SqlServiceContext.class, TestAppContext.class, ProductionAppContext.class})
+public class AppContext {}
+```
+- @Profile이 붙은 설정 클래스는 @Import로 가져오든 @ContextConfigutration에 직접 명시하든 
+- -> 현재 컨테이너의 활성 프로파일 목록에 자신의 프로파일 이름이 들어 있지 않으면 무시됨!
+- -> 활성 프로파일이란 스프링 컨테이너를 실행할 때 추가로 지정해주는 속성
+- Test클래스에서 실행 시 @ActiveProfiles 애노테이션 사용가능
+```java
+@RunWith(SpringJUnit4ClassRunner.class)
+@ActiveProfiles("test")
+@ContextConfiguration(classes = AppContext.class)
+public class UserServiceTest {
+    //..
+}
+```
+- 프로파일이 일종의 필터처럼 적용되서 해당 프로파일이 아닌 설정은 무시됨
+
+
+#### 컨테이너의 빈 등록 정보 확인
+- 스프링 컨테이너에 등록된 빈 정보를 조회하는 방법
+- **스프링 컨테이너는 모두 BeanFactory라는 인터페이스를 구현**하고 있음
+- -> 1장에서 직접 만들어본 DaoFactory 같은 역할을 범용적으로 해주는 **오브젝트 팩토리**
+- BeanFactory 구현 클래스 중 **DefaultListableBeanFactory**가 있는데
+- -> 거의 대부분의 스프링 컨테이너는 이 클래스를 이용해 빈을 등록하고 관리함
+- -> 스프링은 DefaultListableBeanFactory 오브젝트를 @Autowired로 주입 받아서 이용하게 해줌
+- -> DefaultListableBeanFactory에는 getBeanDefinitionNames()가 있음
+- --> 컨테이너에 등록된 모든 빈 이름을 가져올 수 있고, 빈 이름을 이용해 실제 빈과 빈클래스 정보 등도 조회가능.
+
+```java
+class testEx {
+    @Autowired
+    DefaultListableBeanFactory bf;
+    @Test
+    public void beans(){
+        for(String n : bf.getBeanDefinitionNames()){
+            System.out.println(n + "\t " + bf.getBean(n).getClass().getName());
+        }
+    }
+}
+```
+#### 중컵 클래스를 이용한 프로파일 적용 
+- 프로파일에 따라 분리했던 설정 정보를 하나으 ㅣ팡리로 모아보기.. 
+- -> 프로파일이 지정된 독립된 설정 클래스의 구조는 그대로 유지한 채로 소스코드의 위치만 통합하기
+- --> **스태틱 중첩 클래스** 이용!
+- ProdcutionAppContext와 TestAPpContext를 AppContext의 중첩 클래스로 만들기 
+- -> **각각 독립적으로 사용될 수 있게 스태틱 클래스**로 만들어줘야함 !
+```java
+@Configuration
+@EnableTransactionManagement
+@ComponentScan(basePackages="springbook.user")
+//@Import({SqlServiceContext.class, AppContext.TestAppContext.class, AppContext.ProductionAppContext.class})
+@Import(SqlServiceContext.class)
+public class AppContext {
+    //..
+    @Configuration
+    @Profile("production")
+    public static class ProductionAppContext {
+     //..
+    }
+    @Configuration
+    @Profile("test")
+    public static class TestAppContext {
+      //..
+    }
+}
+```
+- -> 중첩 멤버 클래스로 프로파일 설정 클래스 포함시키면 -> @Import에 지정했던 두 개의 프로파일 설정 클래스를 아예 제거해도 됨
+- -> 스태틱 중첩 클래스로 넣은 @Configuration 클래스는 스프링이 자동으로 포함해주기 때문
+
+### 프로퍼티 소스 
+- 프로파일을 이용해 테스트, 운영 환경에서 각각 다른 빈 설정 적용함
+- -> 아직 AppContext에 테스트 환경 종속되는 정보 남아 있음
+- --> dataSource의 DB 연결정보 !! (프로파일에 속하지 않은 빈 설정 정보..)
+- DB드라이버 클래스나, 접속 URL, 로그인 계정 정보 등은 개발환경이나 테스트환경, 운영환경에 따라 달라짐
+- AppContext에 정의된 dataSource 빈은 프로파일에 속하지 않은 빈 설정정보이므로 테스트와 운영 시점 모두 동일한 DB 연결정보를 가진 빈이 만들어짐.
+- 빈 오브젝트 생성과 초기화 방법 자체가 달라질 수 있으니 여러개의 dataSource빈을 만들어두는 게 이상적, 여기서는 스프링 3.1의 기능 설명위해서 dataSource 빈 클래스 모든 환경 동일한 것 사용한다는 가정..
+- -> 문제는 SimpleDriverDataSource 오브젝트를 만든 뒤 DB 연결정보를 프로퍼티 값으로 넣어주는 부분임. 
+- -> 적어도 외부서비스 연결 정보 같은 DB 연결 정보는 환경에 따라 다르게 설정될 수 있어야함. -> 빌드 작업이 필요 없는 xml이나 프로퍼티 같은 텍스트 파일에 저장하는 편이 나음
+
+#### @PropertySource

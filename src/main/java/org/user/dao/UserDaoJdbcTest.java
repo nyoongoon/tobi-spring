@@ -23,7 +23,8 @@ import static org.user.service.UserServiceImpl.MIN_LOGCOUNT_FOR_SILVER;
 import static org.user.service.UserServiceImpl.MIN_RECCOMEND_FOR_GOLD;
 
 @RunWith(SpringJUnit4ClassRunner.class)
-@ContextConfiguration(locations = "/org/user/dao/DaoFactory.java")
+//@ContextConfiguration(locations = "/org/user/dao/DaoFactory.java")
+@ContextConfiguration(classes = AppContext.class)
 @DirtiesContext
 public class UserDaoJdbcTest {
     @Autowired
