@@ -1894,4 +1894,97 @@ public class AppContext {
 - -> 문제는 SimpleDriverDataSource 오브젝트를 만든 뒤 DB 연결정보를 프로퍼티 값으로 넣어주는 부분임. 
 - -> 적어도 외부서비스 연결 정보 같은 DB 연결 정보는 환경에 따라 다르게 설정될 수 있어야함. -> 빌드 작업이 필요 없는 xml이나 프로퍼티 같은 텍스트 파일에 저장하는 편이 나음
 
-#### @PropertySource
+#### @PropertySource - 환경 오브젝트 Environment
+- 프로퍼티에 들어갈 DB 연결 정보는 텍스트로 된 이름과 값의 쌍으로 구성됨
+- 프로퍼티 파일의 확장자는 보통 properties이고 내부에 키=값 형태로 프로퍼티를 정의
+```
+//database.properties
+db.driverClass=com.mysql.jdbcDriver
+db.url=jdbc:mysql://localhost/springbook?characterEncoding=UTF-8
+db.username=spring
+db.password=book
+```
+- AppContext의 dataSource()가 database.properties파일의 내용을 가져와 DB연결정보를 프로퍼티에 넣어주도록 만들기
+- -> 스프링은 **빈 설정 작업에 필요한 프로퍼티 정보를 컨테이너가 관리하고 제공**
+- -> 스프링 컨테이너가 저장된 정보 소스로부터 프로퍼티 값을 수집하고 이를 빈 설정 작업중에 사용할 수 있게 해줌. 
+- -> 컨테이너가 프로퍼티 값을 가져오는 대상을 프로퍼티 소스라고 함
+- 환경변수나 시스템 프로퍼티처럼 디폴트로 프로퍼티 정보를 끌어오는 프로퍼티 소스도 있고, 프로퍼티 파일이나 리소스의 위치를 지정해서 사용되는 프로퍼티 소스도 있음
+- DB 연결정보는 database.properties라는 특정 파일에서 프로퍼티 값을 가져와야 하므로 프로퍼티 소스를 등록해줘야함. 
+- 프로퍼티 소스 등록엔 @PropertySource 애노테이션
+```java
+@Configuration
+@EnableTransactionManagement
+@ComponentScan(basePackages="springbook.user")
+@Import(SqlServiceContext.class)
+@PropertySource("/database.properties")
+public class AppContext {
+    //..
+}
+```
+- @PropertySource로 등록한 리소스로부터 가져오는 프로퍼티 값은 **컨테이너가 관리하는 Environment 타입의 환경 오브젝트에 저장됨**.
+- 환경 오브젝트는 빈처럼 @Autowired를 통해 필드로 주입 받을 수 있음
+- 주입받은 Environment 오브젝트의 getProperty() 메소드를 이용하면 프로퍼티 값을 가져올 수 있음. 
+- dataSource()메소드에서 DB 연결정보 프로퍼티 값을 넣어줄 때 환경 오브젝트로부터 프로퍼티 값을 가져오도록 수정 
+```java
+//..
+public class AppContext{
+    @Autowired
+    Environment env;
+
+    @Bean
+    public DataSource dataSource() { //인터페이스로 반환 주의
+//        SimpleDriverDataSource dataSource = new SimpleDriverDataSource(); //구현체 클래스로 선언 주의
+//        dataSource.setDriverClass(Driver.class);
+//        dataSource.setUrl("jdbc:mysql://localhost/springbook?characterEncoding=UTF-8");
+//        dataSource.setUsername("spring");
+//        dataSource.setPassword("book");
+//        return dataSource;
+        SimpleDriverDataSource ds = new SimpleDriverDataSource();
+        try {
+            ds.setDriverClass((Class<? extends java.sql.Driver>) Class.forName(env.getProperty("db.driverClass")));
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+        ds.setUrl(env.getProperty("db.url"));
+        ds.setUsername(env.getProperty("db.username"));
+        ds.setPassword(env.getProperty("db.password"));
+        return ds;
+    }
+}
+```
+- driverClass 프로퍼티의 경우 DB 연결 드라이버의 클래스로 클래스의 이름이 아니라 Class 타입의 클래스 오브젝트를 넘겨야함
+- -> 그래서 getProperty로 가져온 드라이버 클래스 이름을 Class.forName() 메소드의 도움으로 Class 타입으로 변환한뒤 사용해야함.
+
+#### PropertySourcePlaceholderConfigurer - @Value
+- Environment 오브젝트 대신 프로퍼티 값을 직접 DI 받는 방법도 가능.
+- dataSource 빈의 프로퍼티는 빈 오브젝트가 아니므로 @Autowired를 사용할 수 없음
+- 대신 @Value 애노테이션을 이용하면 됨. -> 값을 주입받을 떄 사용
+- @Value의 사용방법은 여러가지가 있는데, 여기서는 프로퍼티 소스로부터 값을 주입받을 수 있게 치환자를 이용함. 
+- 컨테이너가 제공하는 프로퍼티 값을 주입받을 필드를 선언하고 앞에 @Value 애노테이션을 붙여줌
+- @Value에는 프로퍼티 이름을 ${}안에 넣은 문자열을 디폴트 엘리먼트 값으로 지정함.
+```java
+//..
+public class AppContext{
+    @Value("${db.driverClass}") Class<? extends Driver> driverClass;
+    @Value("${db.url}") String url;
+    @Value("${db.username}") String username;
+    @Value("${db.password}") String pasword;
+    // 프로퍼티 소스를 이용한 치환자 설정용 빈
+    @Bean
+    public static PropertySourcesPlaceholderConfigurer placeholderConfigurer(){
+        return new PropertySourcesPlaceholderConfigurer();
+    }
+    @Bean
+    public DataSource dataSource() { //인터페이스로 반환 주의
+        SimpleDriverDataSource ds = new SimpleDriverDataSource();
+        ds.setDriverClass(this.driverClass);
+        ds.setUrl(this.url);
+        ds.setUsername(this.username);
+        ds.setPassword(this.pasword);
+        return ds;
+    }
+    //..
+}
+```
+- @Value와 치환자를 이용해 프로퍼티 값 필드 주입하려면 특별한 빈을 하나 선언해야함. 
+- PropertySourcesPlaceholderConfigurer -> 빈 팩토리 후처리기로 사용되는 빈을 정의해주는 것 반드시 스태틱 메소드로 선언.. 

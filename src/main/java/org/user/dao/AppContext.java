@@ -1,7 +1,10 @@
 package org.user.dao;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
+import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.SimpleDriverDataSource;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
@@ -23,34 +26,63 @@ import java.sql.Driver;
 @Configuration
 //@ImportResource("/test-applicationContext.xml") 완전 대체함
 @EnableTransactionManagement
-@ComponentScan(basePackages="springbook.user")
+@ComponentScan(basePackages = "springbook.user")
 //@Import({SqlServiceContext.class, AppContext.TestAppContext.class, AppContext.ProductionAppContext.class})
 @Import(SqlServiceContext.class)
+@PropertySource("/database.properties")
 //public class TestApplicationContext { --> 테스트 정보는 분리함
 public class AppContext {
-//    @Autowired
+    //    @Autowired
 //    SqlService sqlService;
     @Autowired
     UserDao userDao;
+    @Autowired
+    Environment env;
+
+    @Value("${db.driverClass}") Class<? extends Driver> driverClass;
+    @Value("${db.url}") String url;
+    @Value("${db.username}") String username;
+    @Value("${db.password}") String pasword;
+
+    // 프로퍼티 소스를 이용한 치환자 설정용 빈
+    @Bean
+    public static PropertySourcesPlaceholderConfigurer placeholderConfigurer(){
+        return new PropertySourcesPlaceholderConfigurer();
+    }
 
     @Bean
     public DataSource dataSource() { //인터페이스로 반환 주의
-        SimpleDriverDataSource dataSource = new SimpleDriverDataSource(); //구현체 클래스로 선언 주의
-        dataSource.setDriverClass(Driver.class);
-        dataSource.setUrl("jdbc:mysql://localhost/springbook?characterEncoding=UTF-8");
-        dataSource.setUsername("spring");
-        dataSource.setPassword("book");
-        return dataSource;
+//        SimpleDriverDataSource dataSource = new SimpleDriverDataSource(); //구현체 클래스로 선언 주의
+//        dataSource.setDriverClass(Driver.class);
+//        dataSource.setUrl("jdbc:mysql://localhost/springbook?characterEncoding=UTF-8");
+//        dataSource.setUsername("spring");
+//        dataSource.setPassword("book");
+//        return dataSource;
+        SimpleDriverDataSource ds = new SimpleDriverDataSource();
+//        try {
+//            ds.setDriverClass((Class<? extends java.sql.Driver>) Class.forName(env.getProperty("db.driverClass")));
+//        } catch (ClassNotFoundException e) {
+//            throw new RuntimeException(e);
+//        }
+//        ds.setUrl(env.getProperty("db.url"));
+//        ds.setUsername(env.getProperty("db.username"));
+//        ds.setPassword(env.getProperty("db.password"));
+        ds.setDriverClass(this.driverClass);
+        ds.setUrl(this.url);
+        ds.setUsername(this.username);
+        ds.setPassword(this.pasword);
+        return ds;
     }
+
     @Bean
-    public PlatformTransactionManager transactionManager(){
+    public PlatformTransactionManager transactionManager() {
         DataSourceTransactionManager tm = new DataSourceTransactionManager();
         tm.setDataSource(dataSource());
         return tm;
     }
 
     @Bean
-    public MailSender mailSender(){
+    public MailSender mailSender() {
         JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
         mailSender.setHost("mail.mycompany.com");
         return mailSender;
@@ -121,6 +153,7 @@ public class AppContext {
             return mailSender;
         }
     }
+
     @Configuration
     @Profile("test")
     public static class TestAppContext {
