@@ -16,7 +16,7 @@ public class OxmSqlService implements SqlService {
     private final BaseSqlService baseSqlService = new BaseSqlService();
 
     //final이므로 변경 불가능. -> OxmSqlService와 OxmSqlReader는 강하게 결합되서 하나의 빈으로 등록되고 한 번에 설정 할 수 있음
-    private final OxmSqlReader oxmSqlReader = new OxmSqReader();
+    private final OxmSqlReader oxmSqlReader = new OxmSqlReader();
 
     private SqlRegistry sqlRegistry = new HashMapSqlRegistry();
 

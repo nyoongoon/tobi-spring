@@ -14,9 +14,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.user.service.DummyMailSender;
 import org.user.service.UserService;
 import org.user.service.UserServiceTest;
-import org.user.sqlservice.OxmSqlService;
-import org.user.sqlservice.SqlRegistry;
-import org.user.sqlservice.SqlService;
+import org.user.sqlservice.*;
 import org.user.sqlservice.updatable.EmbeddedDbSqlRegistry;
 
 import javax.sql.DataSource;
@@ -48,6 +46,11 @@ public class AppContext {
     @Bean
     public static PropertySourcesPlaceholderConfigurer placeholderConfigurer(){
         return new PropertySourcesPlaceholderConfigurer();
+    }
+
+    @Bean
+    public SqlMapConfig sqlMapConfig(){
+        return new UserSqlMapConfig();
     }
 
     @Bean

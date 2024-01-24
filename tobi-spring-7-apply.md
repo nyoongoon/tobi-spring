@@ -1987,4 +1987,85 @@ public class AppContext{
 }
 ```
 - @Value와 치환자를 이용해 프로퍼티 값 필드 주입하려면 특별한 빈을 하나 선언해야함. 
-- PropertySourcesPlaceholderConfigurer -> 빈 팩토리 후처리기로 사용되는 빈을 정의해주는 것 반드시 스태틱 메소드로 선언.. 
+- PropertySourcesPlaceholderConfigurer -> 빈 팩토리 후처리기로 사용되는 빈을 정의해주는 것 반드시 스태틱 메소드로 선언..
+
+
+### 빈 설정의 재사용과 @Enable*
+- SqlServiceContext는 SQL서비스와 관련된 빈 설정정보가 여타 빈 설정정보와 성격이 다르다고 보기에 분리함.
+- SQL 서비스 빈은 서비스 인터페이스, 즉 API인 SqlService만 DAO에 노출하면 되고 나머지 구현 기술이나 방법은 내부에 감춰두고 필요에 따라 자유롭게 변경할 수 있어야함.
+- OXM과 내장형 DB 등을 활용해 만든 SQL 서비스를 적용하려면 네 개의 빈 설정ㅇ ㅣ필요
+- -> 클래스와 인터페이스, 스키마 파일 등은 패키지를 독립적으로 바뀐 뒤에 jar 파일로 묶어서 제공하면 되지만 빈 설정은 프로젝트마다 다시 해줘야하는 번거오룸이 있다. 
+- --> 다행이 이번 절에서 SQL 서비스 관련 빈 설정을 독립적인 자바 클래스로 만들어뒀기 때문에 **빈 설정정보도 라이브러리에 함꼐 패키징해서 제공할 수 있게 됐다.**
+- -> SQL 서비스를 사용하고 싶은 프로젝트라면 다음과 같이 @Import 한 줄만 추가해주면 SQL서비스 관련 빈 등록을 한 번에 끝낼 수 있다. 
+
+#### 빈 설정자
+- SQL 서비스를 재사용 가능한 독립적인 모듈료 만들려면 해결할 문제가 아직 한 가지 남음
+- SQL 매필 내역을 담은 sqlmap.xml 파일 위치 지정하는 부분 -> 직접 지정해야하는데, UserDao인터페이스가 위치한 클래스패스로부터 sqlmap.xml을 가져오게 되어있음
+```java
+public class OxmSqlService implements SqlService {
+    //..
+    private class OxmSqlReader implements SqlReader {
+        private Unmarshaller unmarshaller;
+        private Resource sqlmap = new ClassPathResource("sqlmap.xml", UserDao.class);
+    }
+}
+```
+- -> 디폴트 파일이름과 위치를 따르겠다면 설정을 아예 생략할 수도 있게 만드는 것도 나쁘지 않음
+```
+private Resource sqlmap = new ClassPathResource("/sqlmap.xml");
+```
+- -> SQL 매핑파일 이름이나 위치한 패키지를 변경할수도 있고 클래스패스가 아니라 서블릿 컨텍스트나 파일시스템 HTTP를 통해 접근할 수 있는 리소스로 만들고 싶을 수도 있음
+- -> 현재 외부 주입은 SqlSerivceContext까지만 가능
+- --> DI 설정용 클래스인 SqlServiceContext까지 독립적인 모듈로 분리하면 코드에 남아있는 UserDao 의존성을 제거해야함. 
+- --> JDBC 쿼리를 실행하는 템플릿 코드는 SQL과 같이 매번 달라지는 내용을 콜백 형태로 만들어서 전달하는 방법을 썼음 
+- --> 그에 반해 sqlmap 리소스의 위치는 바뀔일이 없으니 **초기에 한 번 지정**해주면 됨 -> 이런 경우는 **탬클릿/콜백 패턴보다는 기본적인 DI를 이용!!**
+- -> 1장에서 처음 UserDao로부터 DB 커넥션 책임을 분리해내던것과 유사한 작업 하면 됨
+- 일단 인터페이스와 구현 클래스 생성
+```java
+public interface SqlMapConfig {
+    Resource getSqlMapResource();
+}
+public class UserSqlMapConfig implements SqlMapConfig{
+    @Override
+    public Resource getSqlMapResource() {
+        return new ClassPathResource("sqlmap.xml", UserDao.class);
+    }
+}
+```
+- -> 다음으로 SqlServiceContext가 변하지 않는 SqlMapConfig 인터페이스에만 의존학 ㅔ만들고 SqlMapConfig 클래스는 
+- -> 빈으로 정의해 런타임 시 주입되게 만드는 것
+
+```java
+@Configuration
+public class SqlServiceContext {
+    @Autowired
+    SqlMapConfig sqlMapConfig;
+    @Bean
+    public SqlService sqlService() {
+        OxmSqlService sqlService = new OxmSqlService();
+        sqlService.setUnmarshaller(unmarshaller());
+        sqlService.setSqlRegistry(sqlRegistry());
+        sqlService.setSqlmap(this.sqlMapConfig.getSqlMapResource());
+        return sqlService;
+    }
+//..
+}
+//..
+public class AppContext{
+    //..
+    @Bean
+    public SqlMapConfig sqlMapConfig(){
+        return new UserSqlMapConfig();
+    }
+}
+```
+- -> 지금까지 별도의 모듈로 분리할 SqlServiceContext를 제외하고 나머지 빈 설정은 AppContext로 통합함
+- SQL매핑파일 리소스위치도 애플리케이션의 빈 설정에 관련된 정보인데, 이때분에 새로운 클래스를 하나 추가한 것이 좀 못마땅
+- UserSqlMapConfig 클래스와 관련 빈 설정을 아주 간단히 만들 수 있는 방법이 있음. 
+- @Configuration 애노테이션이 달린 빈 설정으로 사용되는 AppContext 같은 클래스도 스프링에선 하나의 빈으로 취급됨
+- -> @Autowired 이용 가능
+- UserSqlMapConfig는 빈으로 만들어져서 SqlMapConfig 타입 빈에 의존하는 SqlServiceContext에 주입됨
+- SqlServiceContext가 필요로하는 빈은 SqlMapCofig 인터페이스를 구현하고 있기만 하면 됨
+- -> AppContext가 SqlMapConfig를 직접 구현하게 하면 어떨까 ?
+- --> AppContext는 빈을 정의하고 DI 정보를 제공하는 설정용 클래스이면서 스르로 빈으로도 사용됨
+- 
