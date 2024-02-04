@@ -17,6 +17,7 @@ import org.user.service.DummyMailSender;
 import org.user.service.UserService;
 import org.user.service.UserServiceTest;
 import org.user.sqlservice.*;
+import org.user.sqlservice.annotation.EnableSqlService;
 import org.user.sqlservice.updatable.EmbeddedDbSqlRegistry;
 
 import javax.sql.DataSource;
@@ -28,7 +29,8 @@ import java.sql.Driver;
 @EnableTransactionManagement
 @ComponentScan(basePackages = "springbook.user")
 //@Import({SqlServiceContext.class, AppContext.TestAppContext.class, AppContext.ProductionAppContext.class})
-@Import(SqlServiceContext.class)
+//@Import(SqlServiceContext.class) //@Import를 메타애노테이션으로 사용하는 커스텀 어노테이션을 생성..
+@EnableSqlService
 @PropertySource("/database.properties")
 //public class TestApplicationContext { --> 테스트 정보는 분리함
 public class AppContext implements SqlMapConfig{

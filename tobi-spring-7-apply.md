@@ -2080,3 +2080,34 @@ public class AppContext{
 - AppContext가 SqlMapConfig를 구현한 빈이 되게 만들어주면 번거롭게 UserSqlMapConfig 클래스를 추가할 필요가 없고, 
 - 빈으로 만들기 위해 sqlMapConfig()메소드를 넣을 필요도 없음 -> 코드 간결해지고, 애플리케이션관련 빈설정이 모두 AppContext로 통합됨
 - -> SqlMapConfig를 DI해두었기 때문에 SqlServiceContext는 수정하지 않아도 됨! 
+
+#### @Enable* 애노테이션
+- 스프링은 SqlServiceContext처럼 모듈화된 빈 설정을 가져올 때 사용하는 @Import를 다른 애노테이션으로 대체할 수 있는 방법을 제공함.
+- -> @Import 애노테이션과 빈 설정 클래스 값을 메타 애노테이션으로 넣어서 아래와같이 애노테이션을 생성
+
+```java
+@Import(value = SqlServiceContext.class)
+public @interface EnableSqlService{}
+```
+##### @Enable... 애노테이션 이해하기.. -> 모듈화된 빈설정을 @Import 메타애노테이션으로 갖기..
+- @Enable로 시작하는 애노테이션은 이미 앞에서 한 번 사용해봄..
+- @EnableTransactionManagement
+```java
+@Import(TransactionManagementConfigurationSelector.class)
+public @interface EnableTransactionManagement {
+    //..
+}
+```
+- @EnableTransactionManagerment를 사용한다는 것은 
+- -> 결국 TransactionManagementConfigurationSelector **설정 클래스를 @Import** 하는 셈
+```java
+@Configuration
+@EnableTransactionManagement
+@ComponentScan(basePackages = "springbook.user")
+@EnableSqlService //@Import를 메타애노테이션으로 갖는 커스텀 (모듈)빈설정용 애노테이션
+@PropertySource("/database.properties")
+public class AppContext implements SqlMapConfig{
+    //..
+}
+```
+- -> @EnableSqlService("classpath:/springbook/user/sqlmap.xml)로 간결하게 변경 가능
