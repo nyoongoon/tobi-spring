@@ -2061,11 +2061,22 @@ public class AppContext{
 ```
 - -> 지금까지 별도의 모듈로 분리할 SqlServiceContext를 제외하고 나머지 빈 설정은 AppContext로 통합함
 - SQL매핑파일 리소스위치도 애플리케이션의 빈 설정에 관련된 정보인데, 이때분에 새로운 클래스를 하나 추가한 것이 좀 못마땅
-- UserSqlMapConfig 클래스와 관련 빈 설정을 아주 간단히 만들 수 있는 방법이 있음. 
+- **UserSqlMapConfig 클래스와 관련 빈 설정을 아주 간단히 만들 수 있는 방법**이 있음. 
 - @Configuration 애노테이션이 달린 빈 설정으로 사용되는 AppContext 같은 클래스도 스프링에선 하나의 빈으로 취급됨
 - -> @Autowired 이용 가능
 - UserSqlMapConfig는 빈으로 만들어져서 SqlMapConfig 타입 빈에 의존하는 SqlServiceContext에 주입됨
 - SqlServiceContext가 필요로하는 빈은 SqlMapCofig 인터페이스를 구현하고 있기만 하면 됨
 - -> AppContext가 SqlMapConfig를 직접 구현하게 하면 어떨까 ?
-- --> AppContext는 빈을 정의하고 DI 정보를 제공하는 설정용 클래스이면서 스르로 빈으로도 사용됨
-- 
+- --> AppContext는 빈을 정의하고 DI 정보를 제공하는 설정용 클래스이면서 스스로 빈으로도 사용됨
+- -> AppContext에는 @Configuration이 달려있는데, @Configuration은 @Compoenent를 메타애노테이션으로 갖고 있는 자동 빈 등록용 애노테이션
+
+##### 빈의 인터페이스 타입 지정
+- 하나의 빈이 꼭 한가지 타입일 필요는 없음 (ex-자기참조빈)
+- -> 빈을 DI 받아서 사용하는 쪽은 **빈이 특정 인터페이스를 구현하고 있는지**만 관심
+- -> 코드의 양이 많지 않고, 같은 그룹으로 묶을 수 있는 여러개의 빈을 하나의 클래스로 만들기도함.
+- AppContext도 원하면 얼마든지 인터페이스를 구현하게 만들 수 있음
+- -> AppContext가 직접 SqlMapConfig 인터페이스를 구현하게 만들면 어떻게 될까? 
+- -> AppContext ==> SqlServiceContext에 주입되어 사용될 수 있음..
+- AppContext가 SqlMapConfig를 구현한 빈이 되게 만들어주면 번거롭게 UserSqlMapConfig 클래스를 추가할 필요가 없고, 
+- 빈으로 만들기 위해 sqlMapConfig()메소드를 넣을 필요도 없음 -> 코드 간결해지고, 애플리케이션관련 빈설정이 모두 AppContext로 통합됨
+- -> SqlMapConfig를 DI해두었기 때문에 SqlServiceContext는 수정하지 않아도 됨! 

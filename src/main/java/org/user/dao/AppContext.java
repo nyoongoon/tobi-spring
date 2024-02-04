@@ -5,6 +5,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
 import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.core.env.Environment;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.SimpleDriverDataSource;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
@@ -29,7 +31,7 @@ import java.sql.Driver;
 @Import(SqlServiceContext.class)
 @PropertySource("/database.properties")
 //public class TestApplicationContext { --> 테스트 정보는 분리함
-public class AppContext {
+public class AppContext implements SqlMapConfig{
     //    @Autowired
 //    SqlService sqlService;
     @Autowired
@@ -48,10 +50,15 @@ public class AppContext {
         return new PropertySourcesPlaceholderConfigurer();
     }
 
-    @Bean
-    public SqlMapConfig sqlMapConfig(){
-        return new UserSqlMapConfig();
+    @Override
+    public Resource getSqlMapResource(){
+        return new ClassPathResource("sqlmap.xml", UserDao.class);
     }
+
+//    @Bean
+//    public SqlMapConfig sqlMapConfig(){ //@AppContext가 SqlMapConfig를 직접구현하여 필요 없어짐..
+//        return new UserSqlMapConfig();
+//    }
 
     @Bean
     public DataSource dataSource() { //인터페이스로 반환 주의
